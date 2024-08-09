@@ -1,10 +1,20 @@
-mysql:
-  host: "localhost"
-  port: 3306
-  database: "minecraft"
-  username: "root"
-  password: "password"
 
+################################################
+#                   Database                   #
+################################################
+
+mysql:
+  host: "47.93.78.245"
+  port: 3306
+  database: "test111"
+  username: "test111"
+  password: "test"
+
+
+
+################################################
+#                      Cost                    #
+################################################
 energy-costs:
   COAL_ORE: 1
   IRON_ORE: 5
@@ -13,41 +23,81 @@ energy-costs:
   LAPIS_ORE: 3
   REDSTONE_ORE: 3
 
-# Default energy values
+################################################
+#                  Energy Value                #
+################################################
 default-energy: 300
 default-max-energy: 300
 default-regen-rate: 10
-
-# Messages
+################################################
+#                    Messages                  #
+################################################
 messages:
   prefix: "&7[&eXiMiningEnergy&7]"
   not-enough-energy: "&cYou don't have enough energy to mine this block!"
   current-energy: "&aYour current energy level is: &e%miningenergy_current_energy%"
   current-energy-err: "&cUnable to retrieve energy level, please try again later."
+  energy-upgrade-success: "&aYou get it! Your energy has been upgrade to &{new_max_energy}!"
+  upgrade-not-enough-money: "&cYou do not have enough money to upgrade!"
+  upgrade-error: "&cAn error occurred while upgrading."
+  regen-rate-upgrade-success: "&aYour energy regen rate has been increased to {new_regen_rate} per minute"
+
+
+  database-active: "&aDatabase connection is active."
+  database-not-active: "&cDatabase connection is not active."
+  database-name: "&aDatabase name: &b{database_name}"
+  database-username: "&aDatabase username: &b{database_username}"
+  database-size: "&aDatabase size: &b{database_size}"
+  database-size-err: "&cUnable to retrieve database size."
+  database-latency: "&aDatabase connection latency &b{latency} &ams."
+  database-information-err: "&cError while retrieving database information."
+
+  vault-status: "Vault status: {vault_status}."
+  placeholderapi-status: "PlaceholderAPI status: {placeholderapi_status}."
+  loaded: "&aLoaded"
+  not-loaded: "&cNot Loaded"
+
+  set-max: "&aMax energy set to {new_max_energy} for player {player}."
+  set-max-err: "&cAn error occurred while setting max energy."
+  set-regen: "&aRegen rate set to {new_regen_rate} for player {player}."
+  set-regen-err: "&cAn error occurred while setting regen rate"
+  set-current: "&aCurrent energy set to {new_current_energy} for player {player}."
+  set-current-err: "&cAn error occurred while setting current energy"
+  fill: "&aEnergy filled to max ({max_energy}) for player {player}."
+  fill-err: "&cAn error occurred while filling energy."
+  permission-deny: "&c You do not have permission to use this command!"
+
   only-player: "&cOnly players can use this command."
 
+  usage: "&cUsage: {command}."
+  unknown-command: "&cUnknown command."
 upgrade-gui:
   title: "Upgrade Your Energy"
   size: 27
   buttons:
     10:
       item: "DIAMOND_SWORD"
+      custommodeldata: 123456
       name: "Upgrade Energy"
       lore:
-        - "当前能量: {current_energy}"
-        - "最大能量: {max_energy}"
-        - "升级需要的金币: {upgrade_cost}"
-        - "恢复满能量需要: {time_to_full_energy} 分钟"
+        - "Current energy: %miningenergy_current_energy%"
+        - "Max energy: %miningenergy_max_energy%"
+        - "Cost to upgrade to next level: %miningenergy_upgrade_cost%"
+        - "Time to full enerygy: %miningenergy_time_to_full_energy% minutes"
       command: "upgrade"
     12:
       item: "GOLDEN_APPLE"
+      custommodeldata: 123457
       name: "Increase Regen Rate"
       lore:
-        - "当前回复速率: {regen_rate}"
-        - "升级费用: {regen_upgrade_cost}"
+        - "Regen rate: %miningenergy_rate%"
+        - "Cost to upgrade to next level: %miningenergy_rate_upgrade_cost%"
       command: "increase_regen_rate"
 
 ##        - "当前能量: %miningenergy_current_energy%"
 ##        - "最大能量: %miningenergy_max_energy%"
 ##        - "升级需要的金币: %miningenergy_upgrade_cost%"
 ##        - "恢复满能量需要: %miningenergy_time_to_full_energy%"
+##        - "速度升级需要： %miningenergy_rate_upgrade_cost%"
+##        - "当前恢复速度： %miningenergy_rate%"
+##        - "恢复满的时间： %miningenergy_time_to_full_energy%"

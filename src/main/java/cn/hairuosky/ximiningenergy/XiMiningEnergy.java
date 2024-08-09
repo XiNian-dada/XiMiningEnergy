@@ -44,6 +44,8 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
     private String onlyPlayerMessage;
     private String databaseActiveMessage,databaseNotActiveMessage,databaseNameMessage,databaseUsername,databaseSizeMessage,databaseSizeErrMessage,databaseLatencyMessage,databaseInformationErrMessages;
     private String vaultStatusMessage,placeholderapiStatusMessage,loadedMessage,notLoadedMessage;
+    private String setMaxMessage,setMaxErrMessage,setRegenMessage,setRegenErrMessage,setCurrentMessage,setCurrentErrMessage,fillMessage,fillErrMessage,permissionDenyMessage;
+    private String usageMessage,unknownCommandMessage;
     @Override
     public void onEnable() {
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null){
@@ -62,7 +64,7 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
         saveDefaultConfig();
         loadConfigValues();
         loadEnergyCostsFromConfig();
-
+        this.getCommand("miningenergy").setTabCompleter(new MiningEnergyTabCompleter(this));
         try {
             connectToDatabase();
             createTableIfNotExists();
@@ -135,8 +137,18 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
         placeholderapiStatusMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.placeholderapi-status","PlaceholderAPI status: {placeholderapi_status}"));
         loadedMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.loaded","&aLoaded"));
         notLoadedMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.not-loaded","&cNot Loaded"));
+        setMaxMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.set-max","&aMax energy set to {new_max_energy} for player {player}."));
+        setMaxErrMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.set-max-err","&cAn error occurred while setting max energy."));
+        setRegenMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.set-regen","&aRegen rate set to {new_regen_rate} for player {player}."));
+        setRegenErrMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.set-regen-err","&cAn error occurred while setting regen rate"));
+        setCurrentMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.set-current","&aCurrent energy set to {new_current_energy} for player {player}."));
+        setCurrentErrMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.set-current-err","&cAn error occurred while setting current energy"));
+        fillMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.fill","&aEnergy filled to max ({max_energy}) for player {player}."));
+        fillErrMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.fill-err","&cAn error occurred while filling energy."));
+        permissionDenyMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.permission-deny","&c You do not have permission to use this command!"));
 
-
+        usageMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.usage","&cUsage: {command}."));
+        unknownCommandMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.unknown-command","&cUnknown command."));
 
     }
 
@@ -241,32 +253,151 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
         if (sender instanceof Player) {
             Player player = (Player) sender;
             UUID uuid = player.getUniqueId();
+
             if (args.length > 0) {
-                if (args[0].equalsIgnoreCase("status")) {
-                    try {
-                        int energy = getCurrentEnergy(uuid);
-                        //player.sendMessage("Your current energy level is: " + energy);
-                        //player.sendMessage(messagePrefix + currentEnergyMessage.replace("{current_energy}",String.valueOf(energy)));
-                        player.sendMessage(messagePrefix + currentEnergyMessage.replace("%miningenergy_current_energy%",String.valueOf(energy)));
-                    } catch (SQLException e) {
-                        e.printStackTrace();
-                        player.sendMessage(messagePrefix + currentEnergyMessageErr);
-                    }
-                    return true;
-                } else if (args[0].equalsIgnoreCase("upgrade")) {
-                    upgradeGUI.open(player);
-                    return true;
-                } else if (args[0].equalsIgnoreCase("info")) {
-                    showDatabaseInfo(player);
-                    return true;
+                String subCommand = args[0].toLowerCase();
+
+                switch (subCommand) {
+                    case "status":
+                        if (player.hasPermission("ximiningenergy.status")) {
+                            try {
+                                int energy = getCurrentEnergy(uuid);
+                                player.sendMessage(messagePrefix + currentEnergyMessage.replace("%miningenergy_current_energy%", String.valueOf(energy)));
+                            } catch (SQLException e) {
+                                e.printStackTrace();
+                                player.sendMessage(messagePrefix + currentEnergyMessageErr);
+                            }
+                        } else {
+                            player.sendMessage(messagePrefix + permissionDenyMessage);
+                        }
+                        return true;
+
+                    case "upgrade":
+                        if (player.hasPermission("ximiningenergy.upgrade")) {
+                            upgradeGUI.open(player);
+                        } else {
+                            player.sendMessage(messagePrefix + permissionDenyMessage);
+                        }
+                        return true;
+
+                    case "info":
+                        if (player.hasPermission("ximiningenergy.info")) {
+                            showDatabaseInfo(player);
+                        } else {
+                            player.sendMessage(messagePrefix + permissionDenyMessage);
+                        }
+                        return true;
+
+                    case "setmax":
+                        if (player.hasPermission("ximiningenergy.setmax")) {
+                            if (args.length >= 3) {
+                                try {
+                                    UUID targetUuid = Bukkit.getPlayer(args[1]).getUniqueId();
+                                    int newMaxEnergy = Integer.parseInt(args[2]);
+                                    updateMaxEnergy(targetUuid, newMaxEnergy);
+                                    player.sendMessage(messagePrefix + setMaxMessage.replace("{new_max_energy}", String.valueOf(newMaxEnergy)).replace("{player}",String.valueOf(args[1])));
+                                    //player.sendMessage(messagePrefix + "Max energy set to " + newMaxEnergy + " for player " + args[1]);
+                                } catch (SQLException | NumberFormatException e) {
+                                    e.printStackTrace();
+                                    player.sendMessage(messagePrefix + setMaxErrMessage);
+                                }
+                            } else {
+                                player.sendMessage(messagePrefix + usageMessage.replace("{command}","/miningenergy setmax <player> <value>"));
+                                //player.sendMessage(messagePrefix + "Usage: /miningenergy setmax <player> <value>");
+                            }
+                        } else {
+                            player.sendMessage(messagePrefix + permissionDenyMessage);
+                        }
+                        return true;
+
+                    case "setregen":
+                        if (player.hasPermission("ximiningenergy.setregen")) {
+                            if (args.length >= 3) {
+                                try {
+                                    UUID targetUuid = Bukkit.getPlayer(args[1]).getUniqueId();
+                                    int newRegenRate = Integer.parseInt(args[2]);
+                                    updateRegenRate(targetUuid, newRegenRate);
+                                    player.sendMessage(messagePrefix + setRegenMessage.replace("{new_regen_rate}",String.valueOf(newRegenRate)).replace("{player}",String.valueOf(args[1])));
+                                    //player.sendMessage(messagePrefix + "Regen rate set to " + newRegenRate + " for player " + args[1]);
+                                } catch (SQLException | NumberFormatException e) {
+                                    e.printStackTrace();
+                                    player.sendMessage(messagePrefix + setRegenErrMessage);
+                                }
+                            } else {
+                                player.sendMessage(messagePrefix + usageMessage.replace("{command}","/miningenergy setregen <player> <value>"));
+                               // player.sendMessage(messagePrefix + "Usage: /miningenergy setregen <player> <value>");
+                            }
+                        } else {
+                            player.sendMessage(messagePrefix + permissionDenyMessage);
+                        }
+                        return true;
+
+                    case "setcurrent":
+                        if (player.hasPermission("ximiningenergy.setcurrent")) {
+                            if (args.length >= 3) {
+                                try {
+                                    UUID targetUuid = Bukkit.getPlayer(args[1]).getUniqueId();
+                                    int newCurrentEnergy = Integer.parseInt(args[2]);
+                                    int maxEnergy = getMaxEnergy(targetUuid);
+
+                                    if (newCurrentEnergy > maxEnergy) {
+                                        newCurrentEnergy = maxEnergy;
+                                    }
+
+                                    setCurrentEnergy(targetUuid, newCurrentEnergy);
+                                    player.sendMessage(messagePrefix + setCurrentMessage.replace("{new_current_energy}",String.valueOf(newCurrentEnergy).replace("{player}",String.valueOf(args[1]))));
+                                    //player.sendMessage(messagePrefix + "Current energy set to " + newCurrentEnergy + " for player " + args[1]);
+                                } catch (SQLException | NumberFormatException e) {
+                                    e.printStackTrace();
+                                    player.sendMessage(messagePrefix + setCurrentErrMessage);
+                                }
+                            } else {
+                                player.sendMessage(messagePrefix + usageMessage.replace("{command}","/miningenergy setcurrent <player> <value>"));
+                                //player.sendMessage(messagePrefix + "Usage: /miningenergy setcurrent <player> <value>");
+                            }
+                        } else {
+                            player.sendMessage(messagePrefix + permissionDenyMessage);
+                        }
+                        return true;
+
+                    case "fill":
+                        if (player.hasPermission("ximiningenergy.fill")) {
+                            if (args.length >= 2) {
+                                try {
+                                    UUID targetUuid = Bukkit.getPlayer(args[1]).getUniqueId();
+                                    int maxEnergy = getMaxEnergy(targetUuid);
+                                    setCurrentEnergy(targetUuid, maxEnergy);
+                                    player.sendMessage(messagePrefix + fillMessage.replace("{player}",String.valueOf(args[1])).replace("{max_energy}",String.valueOf(maxEnergy)));
+                                    //player.sendMessage(messagePrefix + "Energy filled to max (" + maxEnergy + ") for player " + args[1]);
+                                } catch (SQLException e) {
+                                    e.printStackTrace();
+                                    player.sendMessage(messagePrefix + fillErrMessage);
+                                }
+                            } else {
+                                player.sendMessage(messagePrefix + usageMessage.replace("{command}","/miningenergy fill <player>"));
+                                //player.sendMessage(messagePrefix + "Usage: /miningenergy fill <player>");
+                            }
+                        } else {
+                            player.sendMessage(messagePrefix + permissionDenyMessage);
+                        }
+                        return true;
+
+                    default:
+                        //player.sendMessage(messagePrefix + "Unknown command. Usage: /miningenergy status, upgrade, info, setmax, setregen, setcurrent, fill");
+                        player.sendMessage(messagePrefix + unknownCommandMessage + usageMessage.replace("{command}","/miningenergy status, upgrade, info, setmax, setregen, setcurrent, fill"));
+                        return true;
                 }
+            } else {
+                player.sendMessage(messagePrefix + unknownCommandMessage + usageMessage.replace("{command}","/miningenergy status, upgrade, info, setmax, setregen, setcurrent, fill"));
+                //player.sendMessage(messagePrefix + "Usage: /miningenergy status, upgrade, info, setmax, setregen, setcurrent, fill");
             }
-            player.sendMessage(messagePrefix + "Usage: /miningenergy status, /miningenergy upgrade, or /miningenergy info");
         } else {
             sender.sendMessage(messagePrefix + onlyPlayerMessage);
         }
         return false;
     }
+
+
     private void showDatabaseInfo(Player player) {
         try {
             if (connection != null && !connection.isClosed()) {

@@ -4,11 +4,12 @@
 ################################################
 
 mysql:
-  host: "localhost"
+  host: "47.93.78.245"
   port: 3306
-  database: "minecraft"
-  username: "root"
-  password: "password"
+  database: "test111"
+  username: "test111"
+  password: "test"
+
 
 
 ################################################
@@ -51,13 +52,25 @@ messages:
   database-latency: "&aDatabase connection latency &b{latency} &ams."
   database-information-err: "&cError while retrieving database information."
 
-  vault-status: "Vault status: {vault_status}"
-  placeholderapi-status: "PlaceholderAPI status: {placeholderapi_status}"
+  vault-status: "Vault status: {vault_status}."
+  placeholderapi-status: "PlaceholderAPI status: {placeholderapi_status}."
   loaded: "&aLoaded"
   not-loaded: "&cNot Loaded"
 
+  set-max: "&aMax energy set to {new_max_energy} for player {player}."
+  set-max-err: "&cAn error occurred while setting max energy."
+  set-regen: "&aRegen rate set to {new_regen_rate} for player {player}."
+  set-regen-err: "&cAn error occurred while setting regen rate"
+  set-current: "&aCurrent energy set to {new_current_energy} for player {player}."
+  set-current-err: "&cAn error occurred while setting current energy"
+  fill: "&aEnergy filled to max ({max_energy}) for player {player}."
+  fill-err: "&cAn error occurred while filling energy."
+  permission-deny: "&c You do not have permission to use this command!"
+
   only-player: "&cOnly players can use this command."
 
+  usage: "&cUsage: {command}."
+  unknown-command: "&cUnknown command."
 upgrade-gui:
   title: "Upgrade Your Energy"
   size: 27
