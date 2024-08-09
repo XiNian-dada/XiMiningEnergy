@@ -36,6 +36,7 @@ public class UpgradeGUI {
             Material material = Material.getMaterial(itemType);
             String itemName = config.getString("upgrade-gui.buttons." + key + ".name");
             List<String> lore = config.getStringList("upgrade-gui.buttons." + key + ".lore");
+            int customModelData = config.getInt("upgrade-gui.buttons." + key + ".custommodeldata", -1); // 获取自定义模型数据
 
             if (material != null) {
                 ItemStack item = new ItemStack(material);
@@ -43,11 +44,16 @@ public class UpgradeGUI {
                 if (meta != null) {
                     meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', itemName));
 
+                    // 设置自定义模型数据
+                    if (customModelData != -1) {
+                        meta.setCustomModelData(customModelData);
+                    }
+
                     try {
                         int currentEnergy = plugin.getCurrentEnergy(player.getUniqueId());
                         int maxEnergy = plugin.getMaxEnergy(player.getUniqueId());
                         int regenRate = plugin.getRegenRate(player.getUniqueId()); // 获取每分钟恢复能量值
-                        int upgradeCost = (int) Math.ceil(Math.pow(currentEnergy, 2) / 20.0);
+                        int upgradeCost = (int) Math.ceil(Math.pow(maxEnergy, 2) / 20.0);
                         int regenUpgradeCost = (int) Math.pow(regenRate, 3) * 2; // 计算回复速率升级费用
 
                         // 计算恢复满能量所需的时间（分钟）
@@ -60,7 +66,7 @@ public class UpgradeGUI {
                                         .replace("{current_energy}", String.valueOf(currentEnergy))
                                         .replace("{max_energy}", String.valueOf(maxEnergy))
                                         .replace("{upgrade_cost}", String.valueOf(upgradeCost))
-                                        .replace("{minutes_to_full}", String.valueOf(minutesToFull)) // 添加剩余时间
+                                        .replace("{minutes_to_full}", String.valueOf(minutesToFull)) // 修正占位符
                                         .replace("{regen_rate}", String.valueOf(regenRate)) // 添加当前回复速率
                                         .replace("{regen_upgrade_cost}", String.valueOf(regenUpgradeCost)) // 添加回复速率升级费用
                                 ).collect(Collectors.toList());
@@ -79,8 +85,6 @@ public class UpgradeGUI {
 
         player.openInventory(inventory);
     }
-
-
 
     public void handleClick(InventoryClickEvent event) {
         if (event.getView().getTitle().equalsIgnoreCase(ChatColor.translateAlternateColorCodes('&', plugin.getConfig().getString("upgrade-gui.title")))) {
@@ -142,6 +146,5 @@ public class UpgradeGUI {
             }
         }
     }
-
 
 }
