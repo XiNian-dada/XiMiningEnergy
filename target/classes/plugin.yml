@@ -1,0 +1,12 @@
+name: XiMiningEnergy
+version: '1.0-SNAPSHOT'
+main: cn.hairuosky.ximiningenergy.XiMiningEnergy
+api-version: '1.16'
+commands:
+  miningenergy:
+    description: 处理挖矿精力相关命令
+    usage: /<command> <status|upgrade>
+softdepend:
+  - PlaceholderAPI
+depend:
+  - Vault

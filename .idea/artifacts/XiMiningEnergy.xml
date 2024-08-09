@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="XiMiningEnergy">
+    <output-path>$PROJECT_DIR$/out/artifacts/XiMiningEnergy</output-path>
+    <root id="archive" name="XiMiningEnergy.jar">
+      <element id="module-output" name="XiMiningEnergy" />
+    </root>
+  </artifact>
+</component>

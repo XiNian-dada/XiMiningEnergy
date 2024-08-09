@@ -1,0 +1,53 @@
+mysql:
+  host: "localhost"
+  port: 3306
+  database: "minecraft"
+  username: "root"
+  password: "password"
+
+energy-costs:
+  COAL_ORE: 1
+  IRON_ORE: 5
+  GOLD_ORE: 8
+  DIAMOND_ORE: 10
+  LAPIS_ORE: 3
+  REDSTONE_ORE: 3
+
+# Default energy values
+default-energy: 300
+default-max-energy: 300
+default-regen-rate: 10
+
+# Messages
+messages:
+  prefix: "&7[&eXiMiningEnergy&7]"
+  not-enough-energy: "&cYou don't have enough energy to mine this block!"
+  current-energy: "&aYour current energy level is: &e%miningenergy_current_energy%"
+  current-energy-err: "&cUnable to retrieve energy level, please try again later."
+  only-player: "&cOnly players can use this command."
+
+upgrade-gui:
+  title: "Upgrade Your Energy"
+  size: 27
+  buttons:
+    10:
+      item: "DIAMOND_SWORD"
+      name: "Upgrade Energy"
+      lore:
+        - "当前能量: {current_energy}"
+        - "最大能量: {max_energy}"
+        - "升级需要的金币: {upgrade_cost}"
+        - "恢复满能量需要: {time_to_full_energy} 分钟"
+      command: "upgrade"
+    12:
+      item: "GOLDEN_APPLE"
+      name: "Increase Regen Rate"
+      lore:
+        - "当前回复速率: {regen_rate}"
+        - "升级费用: {regen_upgrade_cost}"
+      command: "increase_regen_rate"
+
+##        - "当前能量: %miningenergy_current_energy%"
+##        - "最大能量: %miningenergy_max_energy%"
+##        - "升级需要的金币: %miningenergy_upgrade_cost%"
+##        - "恢复满能量需要: %miningenergy_time_to_full_energy%"
