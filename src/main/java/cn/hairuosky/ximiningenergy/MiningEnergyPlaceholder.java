@@ -50,20 +50,24 @@ public class MiningEnergyPlaceholder extends PlaceholderExpansion {
         try {
             int currentEnergy = plugin.getCurrentEnergy(uuid);
             int maxEnergy = plugin.getMaxEnergy(uuid);
+            int regenRate = plugin.getRegenRate(uuid);
 
             switch (identifier) {
                 case "current_energy":
                     return String.valueOf(currentEnergy);
-
+                case "current_rate":
+                    return String.valueOf(regenRate);
                 case "max_energy":
                     return String.valueOf(maxEnergy);
 
                 case "upgrade_cost":
                     int upgradeCost = (int) Math.ceil(Math.pow(currentEnergy, 2) / 20.0);
                     return String.valueOf(upgradeCost);
-
+                case "rate_upgrade_cost":
+                    int rateUpgradeCost = (int) Math.pow(regenRate, 3) * 2;
+                    return  String.valueOf(rateUpgradeCost);
                 case "time_to_full_energy":
-                    int regenRate = plugin.getRegenRate(uuid);
+
 
                     if (currentEnergy >= maxEnergy) {
                         return "0 minutes";

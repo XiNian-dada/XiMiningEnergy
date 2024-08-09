@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.Objects;
 import java.util.UUID;
 
+@SuppressWarnings("SqlDialectInspection")
 public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecutor {
     private Economy economy;
     private Connection connection;
@@ -41,7 +42,8 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
     private String currentEnergyMessage;
     private String currentEnergyMessageErr;
     private String onlyPlayerMessage;
-
+    private String databaseActiveMessage,databaseNotActiveMessage,databaseNameMessage,databaseUsername,databaseSizeMessage,databaseSizeErrMessage,databaseLatencyMessage,databaseInformationErrMessages;
+    private String vaultStatusMessage,placeholderapiStatusMessage,loadedMessage,notLoadedMessage;
     @Override
     public void onEnable() {
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null){
@@ -121,6 +123,19 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
         currentEnergyMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.current-energy","&aYour current energy level is: &e{current_energy}"));
         currentEnergyMessageErr = ChatColor.translateAlternateColorCodes('&',config.getString("messages.current-energy-err","&cUnable to retrieve energy level, please try again later."));
         onlyPlayerMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.only-player","&cOnly players can use this command."));
+        databaseActiveMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.database-active","&aDatabase connection is active."));
+        databaseNotActiveMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.database-not-active","&cDatabase connection is not active."));
+        databaseNameMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.database-name","&aDatabase name: &b{database_name}"));
+        databaseUsername = ChatColor.translateAlternateColorCodes('&',config.getString("messages.database-username","&aDatabase username: &b{database_username}"));
+        databaseSizeMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.database-size","&aDatabase size: &b{database_size}"));
+        databaseSizeErrMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.database-size-err","&cUnable to retrieve database size."));
+        databaseLatencyMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.database-latency","&aDatabase connection latency &b{latency} &ams."));
+        databaseInformationErrMessages = ChatColor.translateAlternateColorCodes('&',config.getString("messages.information-err","&cError while retrieving database information."));
+        vaultStatusMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.vault-status","Vault status: {vault_status}"));
+        placeholderapiStatusMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.placeholderapi-status","PlaceholderAPI status: {placeholderapi_status}"));
+        loadedMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.loaded","&aLoaded"));
+        notLoadedMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.not-loaded","&cNot Loaded"));
+
 
 
     }
@@ -246,24 +261,26 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
                     return true;
                 }
             }
-            player.sendMessage("Usage: /miningenergy status, /miningenergy upgrade, or /miningenergy info");
+            player.sendMessage(messagePrefix + "Usage: /miningenergy status, /miningenergy upgrade, or /miningenergy info");
         } else {
-            sender.sendMessage(onlyPlayerMessage);
+            sender.sendMessage(messagePrefix + onlyPlayerMessage);
         }
         return false;
     }
     private void showDatabaseInfo(Player player) {
         try {
             if (connection != null && !connection.isClosed()) {
-                player.sendMessage(ChatColor.GREEN + "Database connection is active.");
+                player.sendMessage(messagePrefix + databaseActiveMessage);
 
                 // 获取数据库名和用户名
                 String databaseName = getConfig().getString("mysql.database");
                 String username = getConfig().getString("mysql.username");
 
                 // 显示数据库名和用户名
-                player.sendMessage(ChatColor.GREEN + "Database name: " + ChatColor.AQUA + databaseName);
-                player.sendMessage(ChatColor.GREEN + "Database username: " + ChatColor.AQUA + username);
+                player.sendMessage(messagePrefix + databaseNameMessage.replace("{database_name}", Objects.requireNonNull(databaseName)));
+                player.sendMessage(messagePrefix + databaseUsername.replace("{database_username}", Objects.requireNonNull(username)));
+                //player.sendMessage(ChatColor.GREEN + "Database name: " + ChatColor.AQUA + databaseName);
+                //player.sendMessage(ChatColor.GREEN + "Database username: " + ChatColor.AQUA + username);
 
                 // 获取数据库大小并测量查询延迟
                 long startTime = System.currentTimeMillis();
@@ -279,31 +296,37 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
 
                 if (rs.next()) {
                     double dbSize = rs.getDouble("Size (MB)");
-                    player.sendMessage(ChatColor.GREEN + "Database size: " + ChatColor.AQUA + String.format("%.2f MB", dbSize));
+                    player.sendMessage(messagePrefix + databaseSizeMessage.replace("{database_size}",String.format("%.2f MB", dbSize)));
+                    //player.sendMessage(ChatColor.GREEN + "Database size: " + ChatColor.AQUA + String.format("%.2f MB", dbSize));
                 } else {
-                    player.sendMessage(ChatColor.RED + "Unable to retrieve database size.");
+                    //player.sendMessage(ChatColor.RED + "Unable to retrieve database size.");
+                    player.sendMessage(messagePrefix + databaseSizeErrMessage);
                 }
 
                 // 显示查询延迟
-                player.sendMessage(ChatColor.GREEN + "Connection latency: " + ChatColor.AQUA + latency + " ms");
+                //player.sendMessage(ChatColor.GREEN + "Connection latency: " + ChatColor.AQUA + latency + " ms");
+                player.sendMessage(messagePrefix + databaseLatencyMessage.replace("{latency}",String.valueOf(latency)));
 
                 // 检查插件是否已正确加载
                 checkPluginStatus(player);
             } else {
-                player.sendMessage(ChatColor.RED + "Database connection is not active.");
+                //player.sendMessage(ChatColor.RED + "Database connection is not active.");
+                player.sendMessage(messagePrefix + databaseNotActiveMessage);
             }
         } catch (SQLException e) {
             e.printStackTrace();
-            player.sendMessage(ChatColor.RED + "Error while retrieving database information.");
+            //player.sendMessage(ChatColor.RED + "Error while retrieving database information.");
+            player.sendMessage(messagePrefix + databaseInformationErrMessages);
         }
     }
 
     private void checkPluginStatus(Player player) {
         boolean isVaultLoaded = getServer().getPluginManager().getPlugin("Vault") != null;
         boolean isPlaceholderAPILoaded = getServer().getPluginManager().getPlugin("PlaceholderAPI") != null;
-
-        player.sendMessage(ChatColor.GREEN + "Vault status: " + (isVaultLoaded ? ChatColor.AQUA + "Loaded" : ChatColor.RED + "Not Loaded"));
-        player.sendMessage(ChatColor.GREEN + "PlaceholderAPI status: " + (isPlaceholderAPILoaded ? ChatColor.AQUA + "Loaded" : ChatColor.RED + "Not Loaded"));
+        player.sendMessage(messagePrefix + vaultStatusMessage.replace("{vault_status}",(isVaultLoaded ? loadedMessage : ChatColor.RED + notLoadedMessage)));
+        player.sendMessage(messagePrefix + placeholderapiStatusMessage.replace("{placeholderapi_status}",(isVaultLoaded ? loadedMessage : ChatColor.RED + notLoadedMessage)));
+        //player.sendMessage(ChatColor.GREEN + "Vault status: " + (isVaultLoaded ? ChatColor.AQUA + "Loaded" : ChatColor.RED + "Not Loaded"));
+        //player.sendMessage(ChatColor.GREEN + "PlaceholderAPI status: " + (isPlaceholderAPILoaded ? ChatColor.AQUA + "Loaded" : ChatColor.RED + "Not Loaded"));
     }
 
     @EventHandler
