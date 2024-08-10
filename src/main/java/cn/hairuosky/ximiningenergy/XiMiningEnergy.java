@@ -428,10 +428,10 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
             int deathThreshold = (int) (maxEnergy * 0.02); // 最大能量的2%
 
             // 如果当前能量小于或等于最大能量的5%，发送警告
-            if (currentEnergy <= warningThreshold) {
+            if (currentEnergy <= deathThreshold) {
                 player.sendMessage(messagePrefix + lowWarningMessage);
                 //player.sendMessage(ChatColor.RED + "Warning: Your energy is very low!");
-            } else if (currentEnergy <= deathThreshold) {
+            } else if (currentEnergy <= warningThreshold) {
                 player.sendMessage(messagePrefix + deathThresholdMessage);
                 //player.sendMessage("You will die due to exhaustion of energy! You should take a break!");
             }
