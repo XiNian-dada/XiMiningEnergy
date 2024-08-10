@@ -35,8 +35,8 @@ default-regen-rate: 10
 #                    Max Value                 #
 ################################################
 max-values:
-  max-energy: 1000        # 最大能量值
-  max-regen-rate: 10      # 最大恢复速率
+  max-energy: 1000
+  max-regen-rate: 10
 
 ################################################
 #                     potion                   #
