@@ -8,36 +8,39 @@ import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
-import java.util.UUID;
+import java.util.*;
 
 @SuppressWarnings("SqlDialectInspection")
 public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecutor {
     private Economy economy;
+    private BukkitTask energyRegenTask;
     private Connection connection;
     //private final HashMap<Material, Integer> materialEnergyCost = new HashMap<>();
     // 将 Map<Material, Integer> 改为 Map<String, Integer>
     private Map<String, Integer> materialEnergyCost = new HashMap<>();
-
+    private Map<String, HealingPotion> healingPotions = new HashMap<>();
     private UpgradeGUI upgradeGUI;
     private int defaultEnergy;
     private int defaultMaxEnergy;
@@ -46,11 +49,12 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
     private String messagePrefix;  //插件前缀
     private String currentEnergyMessage;
     private String currentEnergyMessageErr;
-    private String onlyPlayerMessage;
+    private String onlyPlayerMessage,playerNotFoundMessage;
     private String databaseActiveMessage,databaseNotActiveMessage,databaseNameMessage,databaseUsername,databaseSizeMessage,databaseSizeErrMessage,databaseLatencyMessage,databaseInformationErrMessages;
     private String vaultStatusMessage,placeholderapiStatusMessage,loadedMessage,notLoadedMessage;
     private String setMaxMessage,setMaxErrMessage,setRegenMessage,setRegenErrMessage,setCurrentMessage,setCurrentErrMessage,fillMessage,fillErrMessage,permissionDenyMessage;
     private String usageMessage,unknownCommandMessage;
+    private String potionGiveMessage,potionNotFoundMessage;
     @Override
     public void onEnable() {
         // 从配置文件中加载use-itemsadder选项
@@ -90,6 +94,7 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
         // 加载配置值
         loadConfigValues();
         loadEnergyCostsFromConfig();
+        loadHealingPotions();
 
         // 注册命令Tab补全器
         this.getCommand("miningenergy").setTabCompleter(new MiningEnergyTabCompleter(this));
@@ -128,23 +133,54 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
         }
 
         // 每分钟基于配置中的值恢复能量
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                for (Player player : getServer().getOnlinePlayers()) {
-                    UUID uuid = player.getUniqueId();
-                    try {
-                        int currentEnergy = getCurrentEnergy(uuid);
-                        int regenRate = getRegenRate(uuid);
-                        int maxEnergy = getMaxEnergy(uuid);
-                        int newEnergy = Math.min(currentEnergy + regenRate, maxEnergy);
-                        updateEnergy(uuid, newEnergy);
-                    } catch (SQLException e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        }.runTaskTimer(this, 0L, 1200L); // 1200 ticks = 1 minute
+        // 启动能量恢复任务
+        startEnergyRegenTask();
+    }
+    private void reloadPlugin(Player player) {
+        // 重新加载配置文件
+        reloadConfig();
+
+        // 重新加载配置项
+        boolean useItemsAdder = getConfig().getBoolean("use-itemsadder", false);
+
+        // 重新加载配置值
+        loadConfigValues();
+        loadEnergyCostsFromConfig();
+        loadHealingPotions();
+
+        // 重新初始化升级GUI
+        upgradeGUI = new UpgradeGUI(this);
+
+        // 检查并重新连接数据库
+        try {
+            connectToDatabase();
+            createTableIfNotExists();
+        } catch (SQLException e) {
+            e.printStackTrace();
+            getLogger().severe("Unable to connect to MySQL database, please check the configuration!");
+            player.sendMessage(messagePrefix + "Failed to reload plugin due to database issues.");
+            return;
+        }
+
+        // 检查 Vault 插件是否正确连接
+        if (setupEconomy()) {
+            getLogger().info("Vault found and successfully hooked.");
+        } else {
+            getLogger().warning("Vault not found or failed to hook.");
+        }
+
+        // 重新注册 PlaceholderAPI 的占位符
+        if (getServer().getPluginManager().getPlugin("PlaceholderAPI") != null) {
+            new MiningEnergyPlaceholder(this).register();
+            getLogger().info("PlaceholderAPI found and successfully registered placeholders.");
+        } else {
+            getLogger().warning("PlaceholderAPI not found.");
+        }
+
+        // 重新启动每分钟恢复能量的任务
+        startEnergyRegenTask();
+
+        player.sendMessage(messagePrefix + "Plugin reloaded successfully.");
     }
 
     private void loadConfigValues() {
@@ -179,11 +215,78 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
         fillErrMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.fill-err","&cAn error occurred while filling energy."));
         permissionDenyMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.permission-deny","&c You do not have permission to use this command!"));
 
+        playerNotFoundMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.player-not-found","&cThis player not online or not exist"));
         usageMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.usage","&cUsage: {command}."));
         unknownCommandMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.unknown-command","&cUnknown command."));
+        potionGiveMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.potion-give","You give player {player} a {potion}!"));
+        potionNotFoundMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.potion-not-found","Unknown potion {potion}"));
+
 
     }
+    private void loadHealingPotions() {
+        FileConfiguration config = getConfig();
+        ConfigurationSection potionsSection = config.getConfigurationSection("healing-potions");
 
+        if (potionsSection != null) {
+            for (String key : potionsSection.getKeys(false)) {
+                String name = potionsSection.getString(key + ".name");
+                int customModelData = potionsSection.getInt(key + ".custom-model-data");
+                String type = potionsSection.getString(key + ".type");
+                int amount = potionsSection.getInt(key + ".amount");
+
+                HealingPotion potion = new HealingPotion(name, customModelData, type, amount);
+                healingPotions.put(key, potion);
+
+                getLogger().info("Loaded healing potion: " + key + " -> " + potion);
+            }
+        } else {
+            getLogger().warning("No healing potions found in the config!");
+        }
+    }
+    public Map<String, HealingPotion> getHealingPotions() {
+        return Collections.unmodifiableMap(healingPotions);
+    }
+    @EventHandler
+    public void onPlayerUseHealingPotion(PlayerInteractEvent event) {
+        Player player = event.getPlayer();
+        ItemStack item = event.getItem();
+
+        if (item != null && item.getType() == Material.POTION && item.hasItemMeta()) {
+            ItemMeta meta = item.getItemMeta();
+
+            if (meta != null && meta.hasCustomModelData()) {
+                int customModelData = meta.getCustomModelData();
+
+                for (HealingPotion potion : healingPotions.values()) {
+                    if (potion.getCustomModelData() == customModelData) {
+                        event.setCancelled(true);
+
+                        UUID uuid = player.getUniqueId();
+                        try {
+                            int currentEnergy = getCurrentEnergy(uuid);
+                            int maxEnergy = getMaxEnergy(uuid);
+
+                            if (potion.getType().equalsIgnoreCase("points")) {
+                                currentEnergy = Math.min(currentEnergy + potion.getAmount(), maxEnergy);
+                            } else if (potion.getType().equalsIgnoreCase("percentage")) {
+                                currentEnergy = Math.min(currentEnergy + (int) (maxEnergy * (potion.getAmount() / 100.0)), maxEnergy);
+                            }
+
+                            updateEnergy(uuid, currentEnergy);
+                            player.sendMessage(ChatColor.GREEN + "你使用了 " + potion.getName() + "，能量已恢复到 " + currentEnergy);
+
+                            // 消耗药水
+                            item.setAmount(item.getAmount() - 1);
+
+                        } catch (SQLException e) {
+                            e.printStackTrace();
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
     private boolean setupEconomy() {
         RegisteredServiceProvider<Economy> rsp = getServer().getServicesManager().getRegistration(Economy.class);
         if (rsp != null) {
@@ -276,25 +379,46 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
         }
 
         // 输出blockKey以进行调试
-        System.out.println("Block broken: " + blockKey);
+        debugModePrint("Block broken: " + blockKey);
 
         // 检查方块能量消耗
         if (materialEnergyCost.containsKey(blockKey)) {
             cost = materialEnergyCost.get(blockKey);
         } else {
-            System.out.println("No energy cost found for block: " + blockKey);
+            debugModePrint("No energy cost found for block: " + blockKey);
             return; // 如果没有找到该方块的能量消耗值，不进行任何处理
         }
 
         try {
             int currentEnergy = getCurrentEnergy(uuid);
+            int maxEnergy = getMaxEnergy(uuid);
+            int warningThreshold = (int) (maxEnergy * 0.05); // 最大能量的5%
+            int deathThreshold = (int) (maxEnergy * 0.02); // 最大能量的2%
+
+            // 如果当前能量小于或等于最大能量的5%，发送警告
+            if (currentEnergy <= warningThreshold) {
+                player.sendMessage(ChatColor.RED + "警告: 你的能量值非常低!");
+            } else if (currentEnergy <= deathThreshold) {
+                player.sendMessage("You will die due to exhaustion of energy! You should take a break!");
+            }
+            // 如果能量小于或等于2%，并且消耗量大于当前能量，则死亡
+            if (currentEnergy <= deathThreshold) {
+                if (currentEnergy < cost) {
+                    // 如果能量耗尽，取消事件并使玩家死亡
+                    event.setCancelled(true);
+                    player.setHealth(0.0); // 杀死玩家
+                    player.sendMessage(ChatColor.RED + "你因为能量耗尽而死亡!");
+                    Bukkit.broadcastMessage(ChatColor.RED + player.getName() + " 因为能量耗尽而死亡!");
+                    return;
+                }
+            }
             if (currentEnergy >= cost) {
                 reduceEnergy(uuid, cost);
-                System.out.println("Reduced energy by: " + cost);
+                debugModePrint("Reduced energy by: " + cost);
             } else {
                 event.setCancelled(true);
                 player.sendMessage(notEnoughEnergyMessage);
-                System.out.println("Not enough energy: " + currentEnergy + " required: " + cost);
+                debugModePrint("Not enough energy: " + currentEnergy + " required: " + cost);
             }
         } catch (SQLException e) {
             e.printStackTrace();
@@ -348,15 +472,13 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
                                     UUID targetUuid = Bukkit.getPlayer(args[1]).getUniqueId();
                                     int newMaxEnergy = Integer.parseInt(args[2]);
                                     updateMaxEnergy(targetUuid, newMaxEnergy);
-                                    player.sendMessage(messagePrefix + setMaxMessage.replace("{new_max_energy}", String.valueOf(newMaxEnergy)).replace("{player}",String.valueOf(args[1])));
-                                    //player.sendMessage(messagePrefix + "Max energy set to " + newMaxEnergy + " for player " + args[1]);
+                                    player.sendMessage(messagePrefix + setMaxMessage.replace("{new_max_energy}", String.valueOf(newMaxEnergy)).replace("{player}", String.valueOf(args[1])));
                                 } catch (SQLException | NumberFormatException e) {
                                     e.printStackTrace();
                                     player.sendMessage(messagePrefix + setMaxErrMessage);
                                 }
                             } else {
-                                player.sendMessage(messagePrefix + usageMessage.replace("{command}","/miningenergy setmax <player> <value>"));
-                                //player.sendMessage(messagePrefix + "Usage: /miningenergy setmax <player> <value>");
+                                player.sendMessage(messagePrefix + usageMessage.replace("{command}", "/miningenergy setmax <player> <value>"));
                             }
                         } else {
                             player.sendMessage(messagePrefix + permissionDenyMessage);
@@ -370,15 +492,13 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
                                     UUID targetUuid = Bukkit.getPlayer(args[1]).getUniqueId();
                                     int newRegenRate = Integer.parseInt(args[2]);
                                     updateRegenRate(targetUuid, newRegenRate);
-                                    player.sendMessage(messagePrefix + setRegenMessage.replace("{new_regen_rate}",String.valueOf(newRegenRate)).replace("{player}",String.valueOf(args[1])));
-                                    //player.sendMessage(messagePrefix + "Regen rate set to " + newRegenRate + " for player " + args[1]);
+                                    player.sendMessage(messagePrefix + setRegenMessage.replace("{new_regen_rate}", String.valueOf(newRegenRate)).replace("{player}", String.valueOf(args[1])));
                                 } catch (SQLException | NumberFormatException e) {
                                     e.printStackTrace();
                                     player.sendMessage(messagePrefix + setRegenErrMessage);
                                 }
                             } else {
-                                player.sendMessage(messagePrefix + usageMessage.replace("{command}","/miningenergy setregen <player> <value>"));
-                               // player.sendMessage(messagePrefix + "Usage: /miningenergy setregen <player> <value>");
+                                player.sendMessage(messagePrefix + usageMessage.replace("{command}", "/miningenergy setregen <player> <value>"));
                             }
                         } else {
                             player.sendMessage(messagePrefix + permissionDenyMessage);
@@ -398,15 +518,13 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
                                     }
 
                                     setCurrentEnergy(targetUuid, newCurrentEnergy);
-                                    player.sendMessage(messagePrefix + setCurrentMessage.replace("{new_current_energy}",String.valueOf(newCurrentEnergy).replace("{player}",String.valueOf(args[1]))));
-                                    //player.sendMessage(messagePrefix + "Current energy set to " + newCurrentEnergy + " for player " + args[1]);
+                                    player.sendMessage(messagePrefix + setCurrentMessage.replace("{new_current_energy}", String.valueOf(newCurrentEnergy)).replace("{player}", String.valueOf(args[1])));
                                 } catch (SQLException | NumberFormatException e) {
                                     e.printStackTrace();
                                     player.sendMessage(messagePrefix + setCurrentErrMessage);
                                 }
                             } else {
-                                player.sendMessage(messagePrefix + usageMessage.replace("{command}","/miningenergy setcurrent <player> <value>"));
-                                //player.sendMessage(messagePrefix + "Usage: /miningenergy setcurrent <player> <value>");
+                                player.sendMessage(messagePrefix + usageMessage.replace("{command}", "/miningenergy setcurrent <player> <value>"));
                             }
                         } else {
                             player.sendMessage(messagePrefix + permissionDenyMessage);
@@ -420,36 +538,55 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
                                     UUID targetUuid = Bukkit.getPlayer(args[1]).getUniqueId();
                                     int maxEnergy = getMaxEnergy(targetUuid);
                                     setCurrentEnergy(targetUuid, maxEnergy);
-                                    player.sendMessage(messagePrefix + fillMessage.replace("{player}",String.valueOf(args[1])).replace("{max_energy}",String.valueOf(maxEnergy)));
-                                    //player.sendMessage(messagePrefix + "Energy filled to max (" + maxEnergy + ") for player " + args[1]);
+                                    player.sendMessage(messagePrefix + fillMessage.replace("{player}", String.valueOf(args[1])).replace("{max_energy}", String.valueOf(maxEnergy)));
                                 } catch (SQLException e) {
                                     e.printStackTrace();
                                     player.sendMessage(messagePrefix + fillErrMessage);
                                 }
                             } else {
-                                player.sendMessage(messagePrefix + usageMessage.replace("{command}","/miningenergy fill <player>"));
-                                //player.sendMessage(messagePrefix + "Usage: /miningenergy fill <player>");
+                                player.sendMessage(messagePrefix + usageMessage.replace("{command}", "/miningenergy fill <player>"));
                             }
+                        } else {
+                            player.sendMessage(messagePrefix + permissionDenyMessage);
+                        }
+                        return true;
+                    case "reload":
+                        if (player.hasPermission("ximiningenergy.reload")) {
+                            reloadPlugin(player);
                         } else {
                             player.sendMessage(messagePrefix + permissionDenyMessage);
                         }
                         return true;
 
                     default:
-                        //player.sendMessage(messagePrefix + "Unknown command. Usage: /miningenergy status, upgrade, info, setmax, setregen, setcurrent, fill");
-                        player.sendMessage(messagePrefix + unknownCommandMessage + usageMessage.replace("{command}","/miningenergy status, upgrade, info, setmax, setregen, setcurrent, fill"));
+                        player.sendMessage(messagePrefix + unknownCommandMessage + usageMessage.replace("{command}", "/miningenergy status, upgrade, info, setmax, setregen, setcurrent, fill, givepotion, reload"));
+                        return true;
+                    case "givepotion":
+                        if (player.hasPermission("ximiningenergy.givepotion")) {
+                            if (args.length >= 3) {
+                                Player targetPlayer = Bukkit.getPlayer(args[1]);
+                                if (targetPlayer != null) {
+                                    String potionKey = args[2].toLowerCase();
+                                    giveHealingPotion((Player) sender,targetPlayer, potionKey);
+                                } else {
+                                    player.sendMessage(messagePrefix + playerNotFoundMessage);
+                                }
+                            } else {
+                                player.sendMessage(messagePrefix + usageMessage.replace("{command}", "/miningenergy givepotion <player> <potionKey>"));
+                            }
+                        } else {
+                            player.sendMessage(messagePrefix + permissionDenyMessage);
+                        }
                         return true;
                 }
             } else {
-                player.sendMessage(messagePrefix + unknownCommandMessage + usageMessage.replace("{command}","/miningenergy status, upgrade, info, setmax, setregen, setcurrent, fill"));
-                //player.sendMessage(messagePrefix + "Usage: /miningenergy status, upgrade, info, setmax, setregen, setcurrent, fill");
+                player.sendMessage(messagePrefix + unknownCommandMessage + usageMessage.replace("{command}", "/miningenergy status, upgrade, info, setmax, setregen, setcurrent, fill, givepotion, reload"));
             }
         } else {
             sender.sendMessage(messagePrefix + onlyPlayerMessage);
         }
         return false;
     }
-
 
     private void showDatabaseInfo(Player player) {
         try {
@@ -503,7 +640,31 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
             player.sendMessage(messagePrefix + databaseInformationErrMessages);
         }
     }
+    private void startEnergyRegenTask() {
+        // 取消之前的能量恢复任务（如果有）
+        if (energyRegenTask != null && !energyRegenTask.isCancelled()) {
+            energyRegenTask.cancel();
+        }
 
+        // 启动新的能量恢复任务
+        energyRegenTask = new BukkitRunnable() {
+            @Override
+            public void run() {
+                for (Player player : getServer().getOnlinePlayers()) {
+                    UUID uuid = player.getUniqueId();
+                    try {
+                        int currentEnergy = getCurrentEnergy(uuid);
+                        int regenRate = getRegenRate(uuid);
+                        int maxEnergy = getMaxEnergy(uuid);
+                        int newEnergy = Math.min(currentEnergy + regenRate, maxEnergy);
+                        updateEnergy(uuid, newEnergy);
+                    } catch (SQLException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }.runTaskTimer(this, 0L, 1200L); // 1200 ticks = 1 minute
+    }
     private void checkPluginStatus(Player player) {
         boolean isVaultLoaded = getServer().getPluginManager().getPlugin("Vault") != null;
         boolean isPlaceholderAPILoaded = getServer().getPluginManager().getPlugin("PlaceholderAPI") != null;
@@ -517,7 +678,32 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
     public void onInventoryClick(InventoryClickEvent event) {
         upgradeGUI.handleClick(event);
     }
+    private void giveHealingPotion(Player sender, Player targetPlayer, String potionKey) {
+        if (healingPotions.containsKey(potionKey)) {
+            HealingPotion potion = healingPotions.get(potionKey);
 
+            // 构建药水的物品
+            ItemStack potionItem = new ItemStack(Material.POTION, 1);
+            ItemMeta meta = potionItem.getItemMeta();
+
+            if (meta != null) {
+                meta.setDisplayName(ChatColor.RESET + potion.getName());
+                meta.setCustomModelData(potion.getCustomModelData());
+                potionItem.setItemMeta(meta);
+
+                targetPlayer.getInventory().addItem(potionItem);
+
+                // 给执行指令的玩家发送消息，告知药水已给予目标玩家
+                String message = messagePrefix + potionGiveMessage
+                        .replace("{potion}", potion.getName())
+                        .replace("{player}", targetPlayer.getName());
+                sender.sendMessage(message);
+            }
+        } else {
+            // 药水不存在时发送错误消息
+            sender.sendMessage(messagePrefix + potionNotFoundMessage.replace("{potion}", potionKey));
+        }
+    }
     private void loadEnergyCostsFromConfig() {
         FileConfiguration config = getConfig();
         boolean useItemsAdder = config.getBoolean("use-itemsadder", false);
@@ -544,8 +730,6 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
             }
         }
     }
-
-
 
     private void connectToDatabase() throws SQLException {
         FileConfiguration config = getConfig();

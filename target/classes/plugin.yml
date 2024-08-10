@@ -2,11 +2,61 @@ name: XiMiningEnergy
 version: '1.0-SNAPSHOT'
 main: cn.hairuosky.ximiningenergy.XiMiningEnergy
 api-version: '1.16'
+
 commands:
   miningenergy:
+    aliases:
+      - mg
+      - xmg
+      - ximiningenergy
     description: 处理挖矿精力相关命令
-    usage: /<command> <status|upgrade>
-softdepend:
-  - PlaceholderAPI
-depend:
-  - Vault
+    usage: /<command> <status|upgrade|info|setmax|setregen|setcurrent|fill|reload|givepotion>
+    permission: ximiningenergy.use
+    permission-message: '&cYou do not have permission to use this command.'
+
+permissions:
+  ximiningenergy.use:
+    description: 'Allows usage of the miningenergy command'
+    default: true
+    children:
+      ximiningenergy.status: true
+      ximiningenergy.upgrade: true
+
+  ximiningenergy.status:
+    description: 'Allows usage of the status sub-command'
+    default: true
+
+
+  ximiningenergy.upgrade:
+    description: 'Allows usage of the upgrade sub-command'
+    default: true
+
+  ximiningenergy.info:
+    description: 'Allows usage of the info sub-command'
+    default: op
+
+  ximiningenergy.setmax:
+    description: 'Allows setting max energy for players'
+    default: op
+
+  ximiningenergy.setregen:
+    description: 'Allows setting regen rate for players'
+    default: op
+
+  ximiningenergy.setcurrent:
+    description: 'Allows setting current energy for players'
+    default: op
+
+  ximiningenergy.fill:
+    description: 'Allows filling energy to max for players'
+    default: op
+  ximiningenergy.givepotion:
+    default: op
+    description: 'Allows give potion to players'
+  ximiningenergy.reload:
+    description: 'Allows reloading this plugin'
+    default: op
+
+softdepend: [itemsadder, PlaceholderAPI]
+depend: [Vault]
+

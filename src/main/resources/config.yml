@@ -23,13 +23,34 @@ energy-costs:
   DIAMOND_ORE: 10
   LAPIS_ORE: 3
   REDSTONE_ORE: 3
-  itemsadder-my_custom_namespace:custom_ore: 10
+  itemsadder-custom_ores:zipstone9: 100
 ################################################
 #                  Energy Value                #
 ################################################
 default-energy: 300
 default-max-energy: 300
 default-regen-rate: 10
+
+max-values:
+  max-energy: 1000        # 最大能量值
+  max-regen-rate: 10      # 最大恢复速率
+
+healing-potions:
+  potion1:
+    name: "小型恢复药水"
+    custom-model-data: 1001
+    type: "points" # 可选 "points" 或 "percentage"
+    amount: 10 # 恢复的具体点数或百分比
+  potion2:
+    name: "大型恢复药水"
+    custom-model-data: 1002
+    type: "percentage"
+    amount: 25 # 恢复的百分比
+  potion3:
+    name: "终极恢复药水"
+    custom-model-data: 1003
+    type: "points"
+    amount: 100
 ################################################
 #                    Messages                  #
 ################################################
@@ -42,7 +63,7 @@ messages:
   upgrade-not-enough-money: "&cYou do not have enough money to upgrade!"
   upgrade-error: "&cAn error occurred while upgrading."
   regen-rate-upgrade-success: "&aYour energy regen rate has been increased to {new_regen_rate} per minute"
-
+  max-limit-reached: "&cYou have reached the maximum limit for this upgrade!"
 
   database-active: "&aDatabase connection is active."
   database-not-active: "&cDatabase connection is not active."
@@ -69,9 +90,13 @@ messages:
   permission-deny: "&c You do not have permission to use this command!"
 
   only-player: "&cOnly players can use this command."
+  player-not-found: "&cThis player not online or not exist"
 
   usage: "&cUsage: {command}."
   unknown-command: "&cUnknown command."
+
+  potion-give: "You give player {player} a {potion}!"
+  potion-not-found: "Unknown potion {potion}"
 upgrade-gui:
   title: "Upgrade Your Energy"
   size: 27
@@ -98,7 +123,6 @@ upgrade-gui:
 ##        - "当前能量: %miningenergy_current_energy%"
 ##        - "最大能量: %miningenergy_max_energy%"
 ##        - "升级需要的金币: %miningenergy_upgrade_cost%"
-##        - "恢复满能量需要: %miningenergy_time_to_full_energy%"
 ##        - "速度升级需要： %miningenergy_rate_upgrade_cost%"
 ##        - "当前恢复速度： %miningenergy_rate%"
 ##        - "恢复满的时间： %miningenergy_time_to_full_energy%"

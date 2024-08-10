@@ -25,10 +25,13 @@ public class UpgradeGUI {
 
     public void open(Player player) {
         FileConfiguration config = plugin.getConfig();
-        String title = config.getString("upgrade-gui.title","Upgrade Your Energy");
+        String title = config.getString("upgrade-gui.title", "Upgrade Your Energy");
         int size = config.getInt("upgrade-gui.size");
 
         Inventory inventory = Bukkit.createInventory(null, size, ChatColor.translateAlternateColorCodes('&', title));
+
+        int maxEnergyLimit = config.getInt("max-values.max-energy", 1000);  // 获取能量的最大值
+        int maxRegenRateLimit = config.getInt("max-values.max-regen-rate", 10);  // 获取恢复速率的最大值
 
         for (String key : config.getConfigurationSection("upgrade-gui.buttons").getKeys(false)) {
             int slot = Integer.parseInt(key);
@@ -36,7 +39,7 @@ public class UpgradeGUI {
             Material material = Material.getMaterial(itemType);
             String itemName = config.getString("upgrade-gui.buttons." + key + ".name");
             List<String> lore = config.getStringList("upgrade-gui.buttons." + key + ".lore");
-            int customModelData = config.getInt("upgrade-gui.buttons." + key + ".custommodeldata", -1); // 获取自定义模型数据
+            int customModelData = config.getInt("upgrade-gui.buttons." + key + ".custommodeldata", -1);
 
             if (material != null) {
                 ItemStack item = new ItemStack(material);
@@ -44,7 +47,6 @@ public class UpgradeGUI {
                 if (meta != null) {
                     meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', itemName));
 
-                    // 设置自定义模型数据
                     if (customModelData != -1) {
                         meta.setCustomModelData(customModelData);
                     }
@@ -52,23 +54,23 @@ public class UpgradeGUI {
                     try {
                         int currentEnergy = plugin.getCurrentEnergy(player.getUniqueId());
                         int maxEnergy = plugin.getMaxEnergy(player.getUniqueId());
-                        int regenRate = plugin.getRegenRate(player.getUniqueId()); // 获取每分钟恢复能量值
+                        int regenRate = plugin.getRegenRate(player.getUniqueId());
                         int upgradeCost = (int) Math.ceil(Math.pow(maxEnergy, 2) / 20.0);
-                        int regenUpgradeCost = (int) Math.pow(regenRate, 3) * 2; // 计算回复速率升级费用
+                        int regenUpgradeCost = (int) Math.pow(regenRate, 3) * 2;
 
-                        // 计算恢复满能量所需的时间（分钟）
                         int remainingEnergy = maxEnergy - currentEnergy;
-                        int minutesToFull = (remainingEnergy + regenRate - 1) / regenRate; // 向上取整
+                        int minutesToFull = (remainingEnergy + regenRate - 1) / regenRate;
 
-                        // 替换占位符
                         List<String> updatedLore = lore.stream()
                                 .map(line -> ChatColor.translateAlternateColorCodes('&', line)
                                         .replace("%miningenergy_current_energy%", String.valueOf(currentEnergy))
                                         .replace("%miningenergy_max_energy%", String.valueOf(maxEnergy))
                                         .replace("%miningenergy_upgrade_cost%", String.valueOf(upgradeCost))
-                                        .replace("%miningenergy_time_to_full_energy%", String.valueOf(minutesToFull)) // 修正占位符
-                                        .replace("%miningenergy_rate%", String.valueOf(regenRate)) // 添加当前回复速率
-                                        .replace("%miningenergy_rate_upgrade_cost%", String.valueOf(regenUpgradeCost)) // 添加回复速率升级费用
+                                        .replace("%miningenergy_time_to_full_energy%", String.valueOf(minutesToFull))
+                                        .replace("%miningenergy_rate%", String.valueOf(regenRate))
+                                        .replace("%miningenergy_rate_upgrade_cost%", String.valueOf(regenUpgradeCost))
+                                        .replace("%miningenergy_max_energy_limit%", String.valueOf(maxEnergyLimit))
+                                        .replace("%miningenergy_max_regen_rate_limit%", String.valueOf(maxRegenRateLimit))
                                 ).collect(Collectors.toList());
 
                         meta.setLore(updatedLore);
@@ -87,40 +89,51 @@ public class UpgradeGUI {
     }
 
     public void handleClick(InventoryClickEvent event) {
-        if (event.getView().getTitle().equalsIgnoreCase(ChatColor.translateAlternateColorCodes('&', plugin.getConfig().getString("upgrade-gui.title","Upgrade Your Energy")))) {
-            event.setCancelled(true); // Prevent item pick up
+        if (event.getView().getTitle().equalsIgnoreCase(ChatColor.translateAlternateColorCodes('&', plugin.getConfig().getString("upgrade-gui.title", "Upgrade Your Energy")))) {
+            event.setCancelled(true);
 
             ItemStack clickedItem = event.getCurrentItem();
             if (clickedItem != null && clickedItem.hasItemMeta() && clickedItem.getItemMeta().hasDisplayName()) {
                 String command = plugin.getConfig().getString("upgrade-gui.buttons." + event.getSlot() + ".command");
 
                 Player player = (Player) event.getWhoClicked();
-                String messagePrefix = ChatColor.translateAlternateColorCodes('&',plugin.getConfig().getString("messages.prefix","&7[&eXiMiningEnergy&7]"));
-                String upgradeError = ChatColor.translateAlternateColorCodes('&',plugin.getConfig().getString("messages.upgrade-error","&cAn error occurred while upgrading."));
-                String UpgradeFail = ChatColor.translateAlternateColorCodes('&',plugin.getConfig().getString("messages.upgrade-not-enough-money","&cYou do not have enough money to upgrade!"));
-                if ("upgrade".equalsIgnoreCase(command)) {
+                FileConfiguration config = plugin.getConfig();
+                String messagePrefix = ChatColor.translateAlternateColorCodes('&', config.getString("messages.prefix", "&7[&eXiMiningEnergy&7]"));
+                String upgradeError = ChatColor.translateAlternateColorCodes('&', config.getString("messages.upgrade-error", "&cAn error occurred while upgrading."));
+                String upgradeFail = ChatColor.translateAlternateColorCodes('&', config.getString("messages.upgrade-not-enough-money", "&cYou do not have enough money to upgrade!"));
+                String maxLimitReached = ChatColor.translateAlternateColorCodes('&', config.getString("messages.max-limit-reached", "&cYou have reached the maximum limit for this upgrade!"));
 
+                int maxEnergyLimit = config.getInt("max-values.max-energy", 1000);
+                int maxRegenRateLimit = config.getInt("max-values.max-regen-rate", 10);
+
+                if ("upgrade".equalsIgnoreCase(command)) {
                     try {
                         int currentEnergy = plugin.getCurrentEnergy(player.getUniqueId());
                         int maxEnergy = plugin.getMaxEnergy(player.getUniqueId());
                         int upgradeCost = (int) Math.ceil(Math.pow(currentEnergy, 2) / 20.0);
-                        String energyUpgradeSuccess = ChatColor.translateAlternateColorCodes('&',plugin.getConfig().getString("messages.energy-upgrade-success","&aYou get it! Your energy has been upgrade to {new_max_energy}!"));
+
+                        if (maxEnergy >= maxEnergyLimit) {
+                            player.sendMessage(messagePrefix + maxLimitReached);
+                            return;
+                        }
 
                         if (plugin.getEconomy().getBalance(player) >= upgradeCost) {
                             plugin.getEconomy().withdrawPlayer(player, upgradeCost);
 
                             int newMaxEnergy = maxEnergy + 10;
+                            if (newMaxEnergy > maxEnergyLimit) {
+                                newMaxEnergy = maxEnergyLimit;
+                            }
+
                             plugin.updateMaxEnergy(player.getUniqueId(), newMaxEnergy);
                             plugin.setCurrentEnergy(player.getUniqueId(), newMaxEnergy);
 
-                            player.sendMessage(messagePrefix + energyUpgradeSuccess.replace("{new_max_energy}",String.valueOf(newMaxEnergy)));
-                            //player.sendMessage(ChatColor.GREEN + "Your energy has been upgraded to " + newMaxEnergy + "!");
+                            String energyUpgradeSuccess = ChatColor.translateAlternateColorCodes('&', config.getString("messages.energy-upgrade-success", "&aYour energy has been upgraded to {new_max_energy}!"));
+                            player.sendMessage(messagePrefix + energyUpgradeSuccess.replace("{new_max_energy}", String.valueOf(newMaxEnergy)));
 
-                            // 重新打开 GUI 以刷新 lore
                             open(player);
                         } else {
-
-                            player.sendMessage(messagePrefix + UpgradeFail);
+                            player.sendMessage(messagePrefix + upgradeFail);
                         }
                     } catch (SQLException e) {
                         e.printStackTrace();
@@ -131,25 +144,31 @@ public class UpgradeGUI {
                         int regenRate = plugin.getRegenRate(player.getUniqueId());
                         int regenUpgradeCost = (int) Math.pow(regenRate, 3) * 2;
 
+                        if (regenRate >= maxRegenRateLimit) {
+                            player.sendMessage(messagePrefix + maxLimitReached);
+                            return;
+                        }
+
                         if (plugin.getEconomy().getBalance(player) >= regenUpgradeCost) {
                             plugin.getEconomy().withdrawPlayer(player, regenUpgradeCost);
 
                             int newRegenRate = regenRate + 1;
+                            if (newRegenRate > maxRegenRateLimit) {
+                                newRegenRate = maxRegenRateLimit;
+                            }
+
                             plugin.updateRegenRate(player.getUniqueId(), newRegenRate);
 
-                            player.sendMessage(messagePrefix + ChatColor.translateAlternateColorCodes('&',plugin.getConfig().getString("messages.regen-rate-upgrade-success","&aYour energy regen rate has been increased to {new_regen_rate} per minute")).replace("{new_regen_rate}",String.valueOf(newRegenRate)));
-                            //player.sendMessage(ChatColor.GREEN + "Your energy regen rate has been increased to " + newRegenRate + " per minute!");
+                            String regenRateUpgradeSuccess = ChatColor.translateAlternateColorCodes('&', config.getString("messages.regen-rate-upgrade-success", "&aYour energy regen rate has been increased to {new_regen_rate} per minute"));
+                            player.sendMessage(messagePrefix + regenRateUpgradeSuccess.replace("{new_regen_rate}", String.valueOf(newRegenRate)));
 
-                            // 重新打开 GUI 以刷新 lore
                             open(player);
                         } else {
-                            player.sendMessage(messagePrefix + UpgradeFail);
-                            //player.sendMessage(ChatColor.RED + "You do not have enough coins to upgrade your regen rate!");
+                            player.sendMessage(messagePrefix + upgradeFail);
                         }
                     } catch (SQLException e) {
                         e.printStackTrace();
                         player.sendMessage(messagePrefix + upgradeError);
-                        //player.sendMessage(ChatColor.RED + "An error occurred while upgrading your regen rate.");
                     }
                 }
             }
