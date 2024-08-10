@@ -47,8 +47,6 @@ permissions:
     description: 'Allows filling energy to max for players'
     default: op
 
-softdepend:
-  - PlaceholderAPI
+softdepend: [itemsadder, PlaceholderAPI]
+depend: [Vault]
 
-depend:
-  - Vault

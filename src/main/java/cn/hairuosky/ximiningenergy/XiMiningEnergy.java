@@ -1,5 +1,6 @@
 package cn.hairuosky.ximiningenergy;
 
+import dev.lone.itemsadder.api.CustomBlock;
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -25,6 +26,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -32,7 +34,10 @@ import java.util.UUID;
 public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecutor {
     private Economy economy;
     private Connection connection;
-    private final HashMap<Material, Integer> materialEnergyCost = new HashMap<>();
+    //private final HashMap<Material, Integer> materialEnergyCost = new HashMap<>();
+    // 将 Map<Material, Integer> 改为 Map<String, Integer>
+    private Map<String, Integer> materialEnergyCost = new HashMap<>();
+
     private UpgradeGUI upgradeGUI;
     private int defaultEnergy;
     private int defaultMaxEnergy;
@@ -48,23 +53,48 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
     private String usageMessage,unknownCommandMessage;
     @Override
     public void onEnable() {
+        // 从配置文件中加载use-itemsadder选项
+        saveDefaultConfig();
+        boolean useItemsAdder = getConfig().getBoolean("use-itemsadder", false);
+
+        // 检查 PlaceholderAPI
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null){
             getLogger().info("PlaceholderAPI is found");
         } else {
-            getLogger().warning("PlaceholderAPI is not found , it means that you cannot use placeholder");
+            getLogger().warning("PlaceholderAPI is not found, it means that you cannot use placeholder");
         }
 
+        // 检查 Vault
         if (Bukkit.getPluginManager().getPlugin("Vault") != null){
-            getLogger().info("Vault is found , enjoy this plugin!");
+            getLogger().info("Vault is found, enjoy this plugin!");
         } else {
             getLogger().warning("Vault is not found, you should install it on your server");
             Bukkit.getPluginManager().disablePlugin(this);
+            return;
         }
-        // Load configuration file
-        saveDefaultConfig();
+
+        // 检查 ItemsAdder
+        if (useItemsAdder) {
+            if (Bukkit.getPluginManager().getPlugin("ItemsAdder") != null) {
+                getLogger().info("ItemsAdder is found, You can add your custom blocks in this plugin");
+            } else {
+                getLogger().warning("ItemsAdder is not found but use-itemsadder is set to true in the config.");
+                getLogger().warning("Please install ItemsAdder or set use-itemsadder to false.");
+                Bukkit.getPluginManager().disablePlugin(this);
+                return;
+            }
+        } else {
+            getLogger().info("ItemsAdder support is disabled by configuration.");
+        }
+
+        // 加载配置值
         loadConfigValues();
         loadEnergyCostsFromConfig();
+
+        // 注册命令Tab补全器
         this.getCommand("miningenergy").setTabCompleter(new MiningEnergyTabCompleter(this));
+
+        // 连接数据库
         try {
             connectToDatabase();
             createTableIfNotExists();
@@ -75,19 +105,21 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
             return;
         }
 
+        // 初始化升级GUI
         upgradeGUI = new UpgradeGUI(this);
-        // Register event listeners and command executors
+
+        // 注册事件监听器和命令执行器
         getServer().getPluginManager().registerEvents(this, this);
         Objects.requireNonNull(this.getCommand("miningenergy")).setExecutor(this);
 
-        // Vault setup
+        // 设置Vault经济系统
         if (setupEconomy()) {
             getLogger().info("Vault found and successfully hooked.");
         } else {
             getLogger().warning("Vault not found or failed to hook.");
         }
 
-        // Register Placeholder
+        // 注册PlaceholderAPI的占位符
         if (getServer().getPluginManager().getPlugin("PlaceholderAPI") != null) {
             new MiningEnergyPlaceholder(this).register();
             getLogger().info("PlaceholderAPI found and successfully registered placeholders.");
@@ -95,7 +127,7 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
             getLogger().warning("PlaceholderAPI not found.");
         }
 
-        // Regenerate energy every minute based on the config value
+        // 每分钟基于配置中的值恢复能量
         new BukkitRunnable() {
             @Override
             public void run() {
@@ -229,22 +261,43 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
     @EventHandler
     public void onBlockBreak(BlockBreakEvent event) {
         Player player = event.getPlayer();
+        UUID uuid = player.getUniqueId();
         Material blockType = event.getBlock().getType();
 
-        if (materialEnergyCost.containsKey(blockType)) {
-            int cost = materialEnergyCost.get(blockType);
-            UUID uuid = player.getUniqueId();
-            try {
-                int currentEnergy = getCurrentEnergy(uuid);
-                if (currentEnergy >= cost) {
-                    reduceEnergy(uuid, cost);
-                } else {
-                    event.setCancelled(true);
-                    player.sendMessage(notEnoughEnergyMessage);
-                }
-            } catch (SQLException e) {
-                e.printStackTrace();
+        // 默认使用原版方块类型作为key
+        String blockKey = blockType.name();
+        int cost = 0;
+
+        // 检查是否为ItemsAdder自定义方块
+        CustomBlock customBlock = CustomBlock.byAlreadyPlaced(event.getBlock());
+        if (customBlock != null) {
+            // 使用 itemsadder-命名空间:方块名称 的格式作为key
+            blockKey = "itemsadder-" + customBlock.getNamespace() + ":" + customBlock.getId();
+        }
+
+        // 输出blockKey以进行调试
+        System.out.println("Block broken: " + blockKey);
+
+        // 检查方块能量消耗
+        if (materialEnergyCost.containsKey(blockKey)) {
+            cost = materialEnergyCost.get(blockKey);
+        } else {
+            System.out.println("No energy cost found for block: " + blockKey);
+            return; // 如果没有找到该方块的能量消耗值，不进行任何处理
+        }
+
+        try {
+            int currentEnergy = getCurrentEnergy(uuid);
+            if (currentEnergy >= cost) {
+                reduceEnergy(uuid, cost);
+                System.out.println("Reduced energy by: " + cost);
+            } else {
+                event.setCancelled(true);
+                player.sendMessage(notEnoughEnergyMessage);
+                System.out.println("Not enough energy: " + currentEnergy + " required: " + cost);
             }
+        } catch (SQLException e) {
+            e.printStackTrace();
         }
     }
 
@@ -467,16 +520,32 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
 
     private void loadEnergyCostsFromConfig() {
         FileConfiguration config = getConfig();
+        boolean useItemsAdder = config.getBoolean("use-itemsadder", false);
+
+        // 清空 materialEnergyCost 以防止重新加载时重复添加数据
+        materialEnergyCost.clear();
+
         for (String key : config.getConfigurationSection("energy-costs").getKeys(false)) {
-            Material material = Material.getMaterial(key);
             int cost = config.getInt("energy-costs." + key);
-            if (material != null) {
-                materialEnergyCost.put(material, cost);
+
+            if (key.startsWith("itemsadder-") && useItemsAdder) {
+                // 对于 ItemsAdder 自定义方块，直接保存字符串 key 和能量消耗
+                materialEnergyCost.put(key, cost);
+                debugModePrint("Loaded ItemsAdder custom block energy cost: " + key + " -> " + cost);
             } else {
-                getLogger().warning("Unrecognized material: " + key);
+                // 处理原版方块
+                Material material = Material.getMaterial(key);
+                if (material != null) {
+                    materialEnergyCost.put(material.name(), cost);
+                    debugModePrint("Loaded vanilla block energy cost: " + key + " -> " + cost);
+                } else {
+                    getLogger().warning("Unrecognized material: " + key);
+                }
             }
         }
     }
+
+
 
     private void connectToDatabase() throws SQLException {
         FileConfiguration config = getConfig();
@@ -585,5 +654,8 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
             ps.setInt(5, defaultRegenRate);   // Use default regen rate from config
             ps.executeUpdate();
         }
+    }
+    private void debugModePrint(String text){
+        getLogger().info(text);
     }
 }

@@ -87,5 +87,11 @@
             <version>1.7.3</version>
             <scope>provided</scope>
         </dependency>
+        <dependency>
+            <groupId>com.github.LoneDev6</groupId>
+            <artifactId>api-itemsadder</artifactId>
+            <version>3.6.3-beta-14</version>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
 </project>
