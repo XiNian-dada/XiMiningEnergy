@@ -139,6 +139,12 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
         startEnergyRegenTask();
     }
     private void reloadPlugin(Player player) {
+
+        // 移除所有现有的 BossBar
+        for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
+            bossBarManager.removeBossBar(onlinePlayer);
+        }
+
         // 重新加载配置文件
         reloadConfig();
 
@@ -436,9 +442,9 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
                     // If energy is depleted, cancel the event and kill the player
                     event.setCancelled(true);
                     player.setHealth(0.0); // Kill the player
-                    //player.sendMessage(messagePrefix + deathMessage);
-                    player.sendMessage(ChatColor.RED + "You have died due to energy exhaustion!");
-                    Bukkit.broadcastMessage(messagePrefix + deathBroadcastMessage);
+                    player.sendMessage(messagePrefix + deathMessage);
+                    //player.sendMessage(ChatColor.RED + "You have died due to energy exhaustion!");
+                    Bukkit.broadcastMessage(messagePrefix + deathBroadcastMessage.replace("{player}",player.getName()));
                     //Bukkit.broadcastMessage(ChatColor.RED + player.getName() + " has died due to energy exhaustion!");
                     return;
                 }

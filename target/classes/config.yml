@@ -58,15 +58,21 @@ healing-potions:
     type: "points"
     amount: 100
 
-
+################################################
+#                    BossBar                   #
+################################################
 
 bossbar:
-  enabled: true # 是否启用 BossBar 显示
-  display-mode: "permanent" # 可选 "permanent" 或 "temporary"
-  display-time: 5 # 临时显示的时间（秒），仅在 display-mode 为 "temporary" 时有效
-  title: "&aCurrent Stamina: {current_stamina}/{max_stamina}" # BossBar 显示的标题
-  color: "GREEN" # BossBar 的颜色
-  style: "SOLID" # BossBar 的样式
+  enabled: true # Whether to enable BossBar display
+  display-mode: "permanent" # Options are "permanent" or "temporary"
+  display-time: 5 # Time for temporary display (seconds), only valid if display-mode is "temporary"
+  title: "&aCurrent Energy: {current_stamina}/{max_stamina}" # Title of the BossBar display
+  color: "GREEN" # Color of the BossBar
+  style: "SOLID" # Style of the BossBar
+
+# Available colors: PINK, BLUE, RED, GREEN, YELLOW, PURPLE, WHITE, LIGHT_BLUE, ORANGE, BROWN, LIGHT_GRAY, GRAY
+# Available styles: SOLID, SEGMENTED_6, SEGMENTED_10, SEGMENTED_12, SEGMENTED_20
+
 ################################################
 #                    Messages                  #
 ################################################
@@ -80,14 +86,10 @@ messages:
   upgrade-error: "&cAn error occurred while upgrading."
   regen-rate-upgrade-success: "&aYour energy regen rate has been increased to {new_regen_rate} per minute"
   max-limit-reached: "&cYou have reached the maximum limit for this upgrade!"
-  setmax-exceeds-limit: "&cCannot set max energy above the limit of {max_energy_limit}!"
-  setregen-exceeds-limit: "&cCannot set regen rate above the limit of {max_regen_rate_limit}!"
-  addmax-exceeds-limit: "&cCannot increase max energy above the limit of {max_energy_limit}!"
-  addmax-success: "&aMax energy increased by {add_value}. New max energy: {new_max_energy}"
-  addmax-error: "&cError occurred while increasing max energy."
-  addregen-exceeds-limit: "&cCannot increase regen rate above the limit of {max_regen_rate_limit}!"
-  addregen-success: "&aRegen rate increased by {add_value}. New regen rate: {new_regen_rate}"
-  addregen-error: "&cError occurred while increasing regen rate."
+  low-warning: "&cWarning: Your energy is very low!"
+  death-threshold: "&cYou will die due to exhaustion of energy! You should take a break!"
+  death: "&cYou have died due to energy exhaustion!"
+  death-broadcast: "&c{player} has died due to energy exhaustion!"
 
   database-active: "&aDatabase connection is active."
   database-not-active: "&cDatabase connection is not active."
@@ -111,6 +113,14 @@ messages:
   set-current-err: "&cAn error occurred while setting current energy"
   fill: "&aEnergy filled to max ({max_energy}) for player {player}."
   fill-err: "&cAn error occurred while filling energy."
+  setmax-exceeds-limit: "&cCannot set max energy above the limit of {max_energy_limit}!"
+  setregen-exceeds-limit: "&cCannot set regen rate above the limit of {max_regen_rate_limit}!"
+  addmax-exceeds-limit: "&cCannot increase max energy above the limit of {max_energy_limit}!"
+  addmax-success: "&aMax energy increased by {add_value}. New max energy: {new_max_energy}"
+  addmax-error: "&cError occurred while increasing max energy."
+  addregen-exceeds-limit: "&cCannot increase regen rate above the limit of {max_regen_rate_limit}!"
+  addregen-success: "&aRegen rate increased by {add_value}. New regen rate: {new_regen_rate}"
+  addregen-error: "&cError occurred while increasing regen rate."
   permission-deny: "&c You do not have permission to use this command!"
 
   only-player: "&cOnly players can use this command."
@@ -121,6 +131,13 @@ messages:
 
   potion-give: "You give player {player} a {potion}!"
   potion-not-found: "Unknown potion {potion}"
+  use-potion: "You used {potion}, and your energy has been restored to {current_energy}"
+
+
+
+################################################
+#                      GUI                     #
+################################################
 upgrade-gui:
   title: "Upgrade Your Energy"
   size: 27
