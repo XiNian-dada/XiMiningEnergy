@@ -37,6 +37,7 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
     private Economy economy;
     private BukkitTask energyRegenTask;
     private Connection connection;
+    private BossBarManager bossBarManager;
     //private final HashMap<Material, Integer> materialEnergyCost = new HashMap<>();
     // 将 Map<Material, Integer> 改为 Map<String, Integer>
     private Map<String, Integer> materialEnergyCost = new HashMap<>();
@@ -54,7 +55,8 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
     private String vaultStatusMessage,placeholderapiStatusMessage,loadedMessage,notLoadedMessage;
     private String setMaxMessage,setMaxErrMessage,setRegenMessage,setRegenErrMessage,setCurrentMessage,setCurrentErrMessage,fillMessage,fillErrMessage,permissionDenyMessage;
     private String usageMessage,unknownCommandMessage;
-    private String potionGiveMessage,potionNotFoundMessage;
+    private String potionGiveMessage,potionNotFoundMessage,usePotionMessage;
+    private String lowWarningMessage,deathThresholdMessage,deathMessage,deathBroadcastMessage;
     @Override
     public void onEnable() {
         // 从配置文件中加载use-itemsadder选项
@@ -95,7 +97,7 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
         loadConfigValues();
         loadEnergyCostsFromConfig();
         loadHealingPotions();
-
+        bossBarManager = new BossBarManager(this);
         // 注册命令Tab补全器
         this.getCommand("miningenergy").setTabCompleter(new MiningEnergyTabCompleter(this));
 
@@ -140,18 +142,41 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
         // 重新加载配置文件
         reloadConfig();
 
-        // 重新加载配置项
-        boolean useItemsAdder = getConfig().getBoolean("use-itemsadder", false);
-
         // 重新加载配置值
         loadConfigValues();
         loadEnergyCostsFromConfig();
         loadHealingPotions();
+        bossBarManager = new BossBarManager(this); // 重新初始化 BossBar 管理器
 
-        // 重新初始化升级GUI
-        upgradeGUI = new UpgradeGUI(this);
+        // 检查 PlaceholderAPI
+        if (getServer().getPluginManager().getPlugin("PlaceholderAPI") != null) {
+            new MiningEnergyPlaceholder(this).register(); // 重新注册 PlaceholderAPI 占位符
+            getLogger().info("PlaceholderAPI found and successfully registered placeholders.");
+        } else {
+            getLogger().warning("PlaceholderAPI not found.");
+        }
 
-        // 检查并重新连接数据库
+        // 检查 Vault
+        if (setupEconomy()) {
+            getLogger().info("Vault found and successfully hooked.");
+        } else {
+            getLogger().warning("Vault not found or failed to hook.");
+        }
+
+        // 检查 ItemsAdder
+        boolean useItemsAdder = getConfig().getBoolean("use-itemsadder", false);
+        if (useItemsAdder) {
+            if (getServer().getPluginManager().getPlugin("ItemsAdder") != null) {
+                getLogger().info("ItemsAdder is found, You can add your custom blocks in this plugin");
+            } else {
+                getLogger().warning("ItemsAdder is not found but use-itemsadder is set to true in the config.");
+                getLogger().warning("Please install ItemsAdder or set use-itemsadder to false.");
+            }
+        } else {
+            getLogger().info("ItemsAdder support is disabled by configuration.");
+        }
+
+        // 重新连接数据库
         try {
             connectToDatabase();
             createTableIfNotExists();
@@ -162,20 +187,11 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
             return;
         }
 
-        // 检查 Vault 插件是否正确连接
-        if (setupEconomy()) {
-            getLogger().info("Vault found and successfully hooked.");
-        } else {
-            getLogger().warning("Vault not found or failed to hook.");
-        }
+        // 初始化升级GUI
+        upgradeGUI = new UpgradeGUI(this);
 
-        // 重新注册 PlaceholderAPI 的占位符
-        if (getServer().getPluginManager().getPlugin("PlaceholderAPI") != null) {
-            new MiningEnergyPlaceholder(this).register();
-            getLogger().info("PlaceholderAPI found and successfully registered placeholders.");
-        } else {
-            getLogger().warning("PlaceholderAPI not found.");
-        }
+        // 重新注册命令Tab补全器
+        this.getCommand("miningenergy").setTabCompleter(new MiningEnergyTabCompleter(this));
 
         // 重新启动每分钟恢复能量的任务
         startEnergyRegenTask();
@@ -220,6 +236,11 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
         unknownCommandMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.unknown-command","&cUnknown command."));
         potionGiveMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.potion-give","You give player {player} a {potion}!"));
         potionNotFoundMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.potion-not-found","Unknown potion {potion}"));
+        usePotionMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.use-potion","You used {potion}, and your energy has been restored to {current_energy}"));
+        lowWarningMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.low-warning","&cWarning: Your energy is very low!"));
+        deathThresholdMessage = ChatColor.translateAlternateColorCodes('&',getConfig().getString("messages.death-threshold","&cYou will die due to exhaustion of energy! You should take a break!"));
+        deathMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.death","&cYou have died due to energy exhaustion!"));
+        deathBroadcastMessage = ChatColor.translateAlternateColorCodes('&',config.getString("messages.death-broadcast","&c{player} has died due to energy exhaustion!"));
 
 
     }
@@ -273,11 +294,15 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
                             }
 
                             updateEnergy(uuid, currentEnergy);
-                            player.sendMessage(ChatColor.GREEN + "你使用了 " + potion.getName() + "，能量已恢复到 " + currentEnergy);
+                            player.sendMessage(messagePrefix + usePotionMessage.replace("{potion}",potion.getName()).replace("{current_energy}",String.valueOf(currentEnergy)));
+                            //player.sendMessage(ChatColor.GREEN + "You used " + potion.getName() + ", and your energy has been restored to " + currentEnergy);
+
 
                             // 消耗药水
                             item.setAmount(item.getAmount() - 1);
-
+                            if (player != null) {
+                                bossBarManager.updateBossBar(player);
+                            }
                         } catch (SQLException e) {
                             e.printStackTrace();
                         }
@@ -314,6 +339,7 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
+        bossBarManager.removeBossBar(player);
         try {
             saveLastLogoutTime(uuid);
         } catch (SQLException e) {
@@ -397,18 +423,23 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
 
             // 如果当前能量小于或等于最大能量的5%，发送警告
             if (currentEnergy <= warningThreshold) {
-                player.sendMessage(ChatColor.RED + "警告: 你的能量值非常低!");
+                player.sendMessage(messagePrefix + lowWarningMessage);
+                //player.sendMessage(ChatColor.RED + "Warning: Your energy is very low!");
             } else if (currentEnergy <= deathThreshold) {
-                player.sendMessage("You will die due to exhaustion of energy! You should take a break!");
+                player.sendMessage(messagePrefix + deathThresholdMessage);
+                //player.sendMessage("You will die due to exhaustion of energy! You should take a break!");
             }
-            // 如果能量小于或等于2%，并且消耗量大于当前能量，则死亡
+
+            // If energy is less than or equal to 2% and the cost is greater than the current energy, player will die
             if (currentEnergy <= deathThreshold) {
                 if (currentEnergy < cost) {
-                    // 如果能量耗尽，取消事件并使玩家死亡
+                    // If energy is depleted, cancel the event and kill the player
                     event.setCancelled(true);
-                    player.setHealth(0.0); // 杀死玩家
-                    player.sendMessage(ChatColor.RED + "你因为能量耗尽而死亡!");
-                    Bukkit.broadcastMessage(ChatColor.RED + player.getName() + " 因为能量耗尽而死亡!");
+                    player.setHealth(0.0); // Kill the player
+                    //player.sendMessage(messagePrefix + deathMessage);
+                    player.sendMessage(ChatColor.RED + "You have died due to energy exhaustion!");
+                    Bukkit.broadcastMessage(messagePrefix + deathBroadcastMessage);
+                    //Bukkit.broadcastMessage(ChatColor.RED + player.getName() + " has died due to energy exhaustion!");
                     return;
                 }
             }
@@ -471,6 +502,16 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
                                 try {
                                     UUID targetUuid = Bukkit.getPlayer(args[1]).getUniqueId();
                                     int newMaxEnergy = Integer.parseInt(args[2]);
+
+                                    // 获取配置中的最大值
+                                    int maxEnergyLimit = getConfig().getInt("max-values.max-energy", 1000);
+
+                                    // 检查设置的值是否超过最大值
+                                    if (newMaxEnergy > maxEnergyLimit) {
+                                        player.sendMessage(messagePrefix + ChatColor.translateAlternateColorCodes('&', getConfig().getString("messages.setmax-exceeds-limit", "&cCannot set max energy above the limit of {max_energy_limit}!")).replace("{max_energy_limit}", String.valueOf(maxEnergyLimit)));
+                                        return true;
+                                    }
+
                                     updateMaxEnergy(targetUuid, newMaxEnergy);
                                     player.sendMessage(messagePrefix + setMaxMessage.replace("{new_max_energy}", String.valueOf(newMaxEnergy)).replace("{player}", String.valueOf(args[1])));
                                 } catch (SQLException | NumberFormatException e) {
@@ -491,8 +532,18 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
                                 try {
                                     UUID targetUuid = Bukkit.getPlayer(args[1]).getUniqueId();
                                     int newRegenRate = Integer.parseInt(args[2]);
+
+                                    // 获取配置中的最大恢复速率值
+                                    int maxRegenRateLimit = getConfig().getInt("max-values.max-regen-rate", 10);
+
+                                    // 检查设置的恢复速率值是否超过最大限制
+                                    if (newRegenRate > maxRegenRateLimit) {
+                                        player.sendMessage(messagePrefix + ChatColor.translateAlternateColorCodes('&', getConfig().getString("messages.setregen-exceeds-limit", "&cCannot set regen rate above the limit of {max_regen_rate_limit}!")).replace("{max_regen_rate_limit}", String.valueOf(maxRegenRateLimit)));
+                                        return true;
+                                    }
+
                                     updateRegenRate(targetUuid, newRegenRate);
-                                    player.sendMessage(messagePrefix + setRegenMessage.replace("{new_regen_rate}", String.valueOf(newRegenRate)).replace("{player}", String.valueOf(args[1])));
+                                    player.sendMessage(messagePrefix + setRegenMessage.replace("{new_regen_rate}", String.valueOf(newRegenRate)).replace("{player}", args[1]));
                                 } catch (SQLException | NumberFormatException e) {
                                     e.printStackTrace();
                                     player.sendMessage(messagePrefix + setRegenErrMessage);
@@ -519,6 +570,12 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
 
                                     setCurrentEnergy(targetUuid, newCurrentEnergy);
                                     player.sendMessage(messagePrefix + setCurrentMessage.replace("{new_current_energy}", String.valueOf(newCurrentEnergy)).replace("{player}", String.valueOf(args[1])));
+
+                                    // 更新 BossBar
+                                    Player targetPlayer = Bukkit.getPlayer(args[1]);
+                                    if (targetPlayer != null) {
+                                        bossBarManager.updateBossBar(targetPlayer);
+                                    }
                                 } catch (SQLException | NumberFormatException e) {
                                     e.printStackTrace();
                                     player.sendMessage(messagePrefix + setCurrentErrMessage);
@@ -530,7 +587,70 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
                             player.sendMessage(messagePrefix + permissionDenyMessage);
                         }
                         return true;
+                    case "addmax":
+                        if (player.hasPermission("ximiningenergy.addmax")) {
+                            if (args.length >= 3) {
+                                try {
+                                    UUID targetUuid = Bukkit.getPlayer(args[1]).getUniqueId();
+                                    int addValue = Integer.parseInt(args[2]);
 
+                                    int currentMaxEnergy = getMaxEnergy(targetUuid);
+                                    int newMaxEnergy = currentMaxEnergy + addValue;
+
+                                    // 获取配置中的最大值
+                                    int maxEnergyLimit = getConfig().getInt("max-values.max-energy", 1000);
+
+                                    // 检查增加后的值是否超过最大值
+                                    if (newMaxEnergy > maxEnergyLimit) {
+                                        player.sendMessage(messagePrefix + ChatColor.translateAlternateColorCodes('&', getConfig().getString("messages.addmax-exceeds-limit", "&cCannot increase max energy above the limit of {max_energy_limit}!")).replace("{max_energy_limit}", String.valueOf(maxEnergyLimit)));
+                                        return true;
+                                    }
+
+                                    updateMaxEnergy(targetUuid, newMaxEnergy);
+                                    player.sendMessage(messagePrefix + ChatColor.translateAlternateColorCodes('&', getConfig().getString("messages.addmax-success", "&aMax energy increased by {add_value}. New max energy: {new_max_energy}")).replace("{add_value}", String.valueOf(addValue)).replace("{new_max_energy}", String.valueOf(newMaxEnergy)).replace("{player}", String.valueOf(args[1])));
+                                } catch (SQLException | NumberFormatException e) {
+                                    e.printStackTrace();
+                                    player.sendMessage(messagePrefix + ChatColor.translateAlternateColorCodes('&', getConfig().getString("messages.addmax-error", "&cError occurred while increasing max energy.")));
+                                }
+                            } else {
+                                player.sendMessage(messagePrefix + usageMessage.replace("{command}", "/miningenergy addmax <player> <value>"));
+                            }
+                        } else {
+                            player.sendMessage(messagePrefix + permissionDenyMessage);
+                        }
+                        return true;
+                    case "addregen":
+                        if (player.hasPermission("ximiningenergy.addregen")) {
+                            if (args.length >= 3) {
+                                try {
+                                    UUID targetUuid = Bukkit.getPlayer(args[1]).getUniqueId();
+                                    int addValue = Integer.parseInt(args[2]);
+
+                                    int currentRegenRate = getRegenRate(targetUuid);
+                                    int newRegenRate = currentRegenRate + addValue;
+
+                                    // 获取配置中的最大恢复速率
+                                    int maxRegenRateLimit = getConfig().getInt("max-values.max-regen-rate", 10);
+
+                                    // 检查增加后的值是否超过最大恢复速率
+                                    if (newRegenRate > maxRegenRateLimit) {
+                                        player.sendMessage(messagePrefix + ChatColor.translateAlternateColorCodes('&', getConfig().getString("messages.addregen-exceeds-limit", "&cCannot increase regen rate above the limit of {max_regen_rate_limit}!")).replace("{max_regen_rate_limit}", String.valueOf(maxRegenRateLimit)));
+                                        return true;
+                                    }
+
+                                    updateRegenRate(targetUuid, newRegenRate);
+                                    player.sendMessage(messagePrefix + ChatColor.translateAlternateColorCodes('&', getConfig().getString("messages.addregen-success", "&aRegen rate increased by {add_value}. New regen rate: {new_regen_rate}")).replace("{add_value}", String.valueOf(addValue)).replace("{new_regen_rate}", String.valueOf(newRegenRate)).replace("{player}", String.valueOf(args[1])));
+                                } catch (SQLException | NumberFormatException e) {
+                                    e.printStackTrace();
+                                    player.sendMessage(messagePrefix + ChatColor.translateAlternateColorCodes('&', getConfig().getString("messages.addregen-error", "&cError occurred while increasing regen rate.")));
+                                }
+                            } else {
+                                player.sendMessage(messagePrefix + usageMessage.replace("{command}", "/miningenergy addregen <player> <value>"));
+                            }
+                        } else {
+                            player.sendMessage(messagePrefix + permissionDenyMessage);
+                        }
+                        return true;
                     case "fill":
                         if (player.hasPermission("ximiningenergy.fill")) {
                             if (args.length >= 2) {
@@ -539,6 +659,12 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
                                     int maxEnergy = getMaxEnergy(targetUuid);
                                     setCurrentEnergy(targetUuid, maxEnergy);
                                     player.sendMessage(messagePrefix + fillMessage.replace("{player}", String.valueOf(args[1])).replace("{max_energy}", String.valueOf(maxEnergy)));
+
+                                    // 更新 BossBar
+                                    Player targetPlayer = Bukkit.getPlayer(args[1]);
+                                    if (targetPlayer != null) {
+                                        bossBarManager.updateBossBar(targetPlayer);
+                                    }
                                 } catch (SQLException e) {
                                     e.printStackTrace();
                                     player.sendMessage(messagePrefix + fillErrMessage);
@@ -658,6 +784,9 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
                         int maxEnergy = getMaxEnergy(uuid);
                         int newEnergy = Math.min(currentEnergy + regenRate, maxEnergy);
                         updateEnergy(uuid, newEnergy);
+
+                        // 更新 BossBar
+                        bossBarManager.updateBossBar(player);
                     } catch (SQLException e) {
                         e.printStackTrace();
                     }
@@ -665,6 +794,7 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
             }
         }.runTaskTimer(this, 0L, 1200L); // 1200 ticks = 1 minute
     }
+
     private void checkPluginStatus(Player player) {
         boolean isVaultLoaded = getServer().getPluginManager().getPlugin("Vault") != null;
         boolean isPlaceholderAPILoaded = getServer().getPluginManager().getPlugin("PlaceholderAPI") != null;
@@ -803,12 +933,31 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
         ps.setInt(1, newEnergy);
         ps.setString(2, uuid.toString());
         ps.executeUpdate();
+
+        // 更新 BossBar
+        Player player = getServer().getPlayer(uuid);
+        if (player != null) {
+            bossBarManager.updateBossBar(player);
+        }
     }
+
 
     public void reduceEnergy(UUID uuid, int amount) throws SQLException {
         int currentEnergy = getCurrentEnergy(uuid);
         int newEnergy = Math.max(currentEnergy - amount, 0);
         updateEnergy(uuid, newEnergy);
+
+        // 调试日志
+        debugModePrint("Reduced energy for player " + uuid + ": " + currentEnergy + " -> " + newEnergy);
+
+        // 更新 BossBar
+        Player player = getServer().getPlayer(uuid);
+        if (player != null) {
+            debugModePrint("Updating BossBar for player " + player.getName());
+            bossBarManager.updateBossBar(player);
+        } else {
+            debugModePrint("Player with UUID " + uuid + " is not online. BossBar update skipped.");
+        }
     }
 
     public void updateMaxEnergy(UUID uuid, int newMaxEnergy) throws SQLException {
@@ -816,6 +965,12 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
         ps.setInt(1, newMaxEnergy);
         ps.setString(2, uuid.toString());
         ps.executeUpdate();
+
+        // 更新 BossBar
+        Player player = getServer().getPlayer(uuid);
+        if (player != null) {
+            bossBarManager.updateBossBar(player);
+        }
     }
     public void updateRegenRate(UUID uuid, int newRegenRate) throws SQLException {
         PreparedStatement ps = connection.prepareStatement("UPDATE mining_energy SET regen_rate = ? WHERE uuid = ?");
@@ -837,9 +992,16 @@ public class XiMiningEnergy extends JavaPlugin implements Listener, CommandExecu
             ps.setInt(4, defaultMaxEnergy);  // Use default max energy value from config
             ps.setInt(5, defaultRegenRate);   // Use default regen rate from config
             ps.executeUpdate();
+
+            // 显示 BossBar
+            debugModePrint("Showing BossBar for player " + player.getName());
+            bossBarManager.showBossBar(player);
+        } else {
+            debugModePrint("Player with UUID " + uuid + " is not online during data initialization.");
         }
     }
-    private void debugModePrint(String text){
+
+    public void debugModePrint(String text){
         getLogger().info(text);
     }
 }

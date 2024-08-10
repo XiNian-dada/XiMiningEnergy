@@ -42,7 +42,13 @@ permissions:
   ximiningenergy.setregen:
     description: 'Allows setting regen rate for players'
     default: op
+  ximiningenergy.addmax:
+    description: 'Allows add max energy for players'
+    default: op
 
+  ximiningenergy.addregen:
+    description: 'Allows add regen rate for players'
+    default: op
   ximiningenergy.setcurrent:
     description: 'Allows setting current energy for players'
     default: op

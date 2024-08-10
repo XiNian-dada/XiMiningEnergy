@@ -31,7 +31,16 @@ default-energy: 300
 default-max-energy: 300
 default-regen-rate: 10
 
+################################################
+#                    Max Value                 #
+################################################
+max-values:
+  max-energy: 1000        # 最大能量值
+  max-regen-rate: 10      # 最大恢复速率
 
+################################################
+#                     potion                   #
+################################################
 healing-potions:
   potion1:
     name: "小型恢复药水"
@@ -48,6 +57,16 @@ healing-potions:
     custom-model-data: 1003
     type: "points"
     amount: 100
+
+
+
+bossbar:
+  enabled: true # 是否启用 BossBar 显示
+  display-mode: "permanent" # 可选 "permanent" 或 "temporary"
+  display-time: 5 # 临时显示的时间（秒），仅在 display-mode 为 "temporary" 时有效
+  title: "&aCurrent Stamina: {current_stamina}/{max_stamina}" # BossBar 显示的标题
+  color: "GREEN" # BossBar 的颜色
+  style: "SOLID" # BossBar 的样式
 ################################################
 #                    Messages                  #
 ################################################
@@ -60,7 +79,15 @@ messages:
   upgrade-not-enough-money: "&cYou do not have enough money to upgrade!"
   upgrade-error: "&cAn error occurred while upgrading."
   regen-rate-upgrade-success: "&aYour energy regen rate has been increased to {new_regen_rate} per minute"
-
+  max-limit-reached: "&cYou have reached the maximum limit for this upgrade!"
+  setmax-exceeds-limit: "&cCannot set max energy above the limit of {max_energy_limit}!"
+  setregen-exceeds-limit: "&cCannot set regen rate above the limit of {max_regen_rate_limit}!"
+  addmax-exceeds-limit: "&cCannot increase max energy above the limit of {max_energy_limit}!"
+  addmax-success: "&aMax energy increased by {add_value}. New max energy: {new_max_energy}"
+  addmax-error: "&cError occurred while increasing max energy."
+  addregen-exceeds-limit: "&cCannot increase regen rate above the limit of {max_regen_rate_limit}!"
+  addregen-success: "&aRegen rate increased by {add_value}. New regen rate: {new_regen_rate}"
+  addregen-error: "&cError occurred while increasing regen rate."
 
   database-active: "&aDatabase connection is active."
   database-not-active: "&cDatabase connection is not active."

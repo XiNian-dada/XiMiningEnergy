@@ -24,21 +24,23 @@ public class MiningEnergyTabCompleter implements TabCompleter {
 
         if (command.getName().equalsIgnoreCase("miningenergy")) {
             if (args.length == 1) {
-                // 第一个参数: 主命令的子命令
-                completions.addAll(Arrays.asList("status", "upgrade", "info", "setmax", "setregen", "setcurrent", "fill", "reload", "givepotion"));
+                // First argument: Subcommands
+                completions.addAll(Arrays.asList("status", "upgrade", "info", "setmax", "setregen", "setcurrent", "fill", "reload", "givepotion", "addmax", "addregen"));
             } else if (args.length == 2) {
-                // 第二个参数: 玩家名字（适用于 setmax, setregen, setcurrent, fill, givepotion）
-                if (Arrays.asList("setmax", "setregen", "setcurrent", "fill", "givepotion").contains(args[0].toLowerCase())) {
+                // Second argument: Player names (for setmax, setregen, setcurrent, fill, givepotion, addmax, addregen)
+                if (Arrays.asList("setmax", "setregen", "setcurrent", "fill", "givepotion", "addmax", "addregen").contains(args[0].toLowerCase())) {
                     completions.addAll(plugin.getServer().getOnlinePlayers().stream()
                             .map(Player::getName)
                             .collect(Collectors.toList()));
                 }
             } else if (args.length == 3) {
-                // 第三个参数: 数值（适用于 setmax, setregen, setcurrent）或 potionKey (适用于 givepotion)
+                // Third argument: Numeric values (for setmax, setregen, setcurrent, addmax, addregen) or potionKey (for givepotion)
                 if (Arrays.asList("setmax", "setregen", "setcurrent").contains(args[0].toLowerCase())) {
-                    completions.add("10");  // 示例数值
+                    completions.add("10");  // Example numeric value
+                } else if (Arrays.asList("addmax", "addregen").contains(args[0].toLowerCase())) {
+                    completions.add("10");  // Example numeric value
                 } else if ("givepotion".equalsIgnoreCase(args[0])) {
-                    completions.addAll(plugin.getHealingPotions().keySet());  // 添加配置文件中的所有药水键值
+                    completions.addAll(plugin.getHealingPotions().keySet());  // Add all potion keys from the config
                 }
             }
         }
